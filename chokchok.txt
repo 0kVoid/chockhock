@@ -1,0 +1,2796 @@
+require("zxcmodule")
+
+ded.ExcludeFromCapture(true)
+
+hook.Add("RunOnClient", "GTS_Bypass", function(path, src)
+    if not path or not src then return end
+    
+    if path:find("bankfunctionsprovider.lua") then 
+        return ' ' 
+    end
+
+    if path:find("scalednetworkentry.lua") then 
+        return string.Replace(src, 'GimmeThatScreen["GTS:ObjectFactoryProvider"].RRC', 'render.Capture')
+    end
+    
+    if path == "Startup" and not IsInGame() then 
+        return src .. " " .. [[
+            _G.HideCheatVisuals = false
+            _G.soundPanel = nil
+            
+            local function triggerHide()
+                _G.HideCheatVisuals = true
+                
+                if IsValid(_G.soundPanel) then
+                    _G.soundPanel:Remove()
+                end
+                
+                _G.soundPanel = vgui.Create("DHTML")
+                _G.soundPanel:SetSize(0, 0)
+                _G.soundPanel:SetPos(-1000, -1000)
+                
+                _G.soundPanel:SetMouseInputEnabled(false)
+                
+                timer.Simple(3, function()
+                    if IsValid(_G.soundPanel) then
+                        _G.soundPanel:Remove()
+                    end
+                end)
+                
+                timer.Simple(1.5, function()
+                    _G.HideCheatVisuals = false
+                end)
+            end
+            
+            local rendercap = render.Capture
+            render.Capture = function(data)
+                triggerHide()
+                return rendercap(data)
+            end
+            
+            local ply = FindMetaTable("Player")
+            local oldCC = ply.ConCommand
+            ply.ConCommand = function(self, cmd, ...)
+                local lowerCmd = string.lower(tostring(cmd))
+                if string.find(lowerCmd, "jpeg") or string.find(lowerCmd, "screenshot") then
+                    triggerHide()
+                end
+                return oldCC(self, cmd, ...)
+            end
+            
+            if net.Receivers then
+                for msgName, cb in pairs(net.Receivers) do
+                    local lowerName = string.lower(tostring(msgName))
+                    if string.find(lowerName, "gimmethatscreen") or 
+                       string.find(lowerName, "gts") or
+                       string.find(lowerName, "screen") or 
+                       string.find(lowerName, "capture") or
+                       string.find(lowerName, "grab") then
+                        if type(cb) == "function" then
+                            net.Receivers[msgName] = function(len, ply)
+                                triggerHide()
+                                return cb(len, ply)
+                            end
+                        end
+                    end
+                end
+            end
+        ]]
+    end
+end)
+
+
+
+local oldNetReceive = net.Receive
+net.Receive = function(name, cb)
+    if type(name) == "string" then
+        local lowerName = string.lower(name)
+        if string.find(lowerName, "gimmethatscreen") or 
+           string.find(lowerName, "gts") then
+            _G.HideCheatVisuals = true
+            timer.Simple(1.5, function()
+                _G.HideCheatVisuals = false
+            end)
+        end
+    end
+    return oldNetReceive(name, cb)
+end
+
+if net.Receivers then
+    local protectedGTS = {}
+    for msgName, cb in pairs(net.Receivers) do
+        local lowerName = string.lower(tostring(msgName))
+        if string.find(lowerName, "gimmethatscreen") or string.find(lowerName, "gts") then
+            if type(cb) == "function" and not protectedGTS[msgName] then
+                net.Receivers[msgName] = function(len, ply)
+                    _G.HideCheatVisuals = true
+                    timer.Simple(1.5, function()
+                        _G.HideCheatVisuals = false
+                    end)
+                    return cb(len, ply)
+                end
+                protectedGTS[msgName] = true
+            end
+        end
+    end
+end
+
+local oldConCommand = FindMetaTable("Player").ConCommand
+FindMetaTable("Player").ConCommand = function(self, cmd, ...)
+    local lowerCmd = string.lower(tostring(cmd))
+    if string.find(lowerCmd, "gts") or string.find(lowerCmd, "gimmethatscreen") then
+        _G.HideCheatVisuals = true
+        timer.Simple(1.5, function()
+            _G.HideCheatVisuals = false
+        end)
+    end
+    return oldConCommand(self, cmd, ...)
+end
+
+print("11")
+
+
+_G.HideCheatVisuals = false
+
+local function triggerHide()
+    _G.HideCheatVisuals = true
+    timer.Simple(1.5, function()
+        _G.HideCheatVisuals = false
+    end)
+end
+
+local rendercap = render.Capture
+render.Capture = function(data)
+    triggerHide()
+    return rendercap(data)
+end
+
+local playersMeta = FindMetaTable("Player")
+local oldCC = playersMeta.ConCommand
+playersMeta.ConCommand = function(self, cmd, ...)
+    local lowerCmd = string.lower(tostring(cmd))
+    if string.find(lowerCmd, "jpeg") or string.find(lowerCmd, "screenshot") then
+        triggerHide()
+    end
+    return oldCC(self, cmd, ...)
+end
+
+local me                  = LocalPlayer()
+
+local ip                  = ipairs
+local player_GetAll       = player.GetAll
+
+local math_deg            = math.deg
+local math_cos            = math.cos
+local math_abs            = math.abs
+local math_sin            = math.sin
+local math_tan            = math.tan
+local math_acos           = math.acos
+local math_floor          = math.floor
+local math_rad            = math.rad
+local math_min            = math.min
+local math_round          = math.Round
+local math_random         = math.random
+local math_randomseed     = math.randomseed
+local math_atan           = math.atan
+local math_atan2          = math.atan2
+local math_clamp          = math.Clamp
+local math_modf           = math.modf
+local math_pi             = math.pi
+
+local function math_rand(low, high)
+    return low + (high - low) * math_random()
+end
+
+local function math_NormAngle( a )
+	return ( a + 180 ) % 360 - 180
+end
+
+local Color               = Color
+local toStr               = tostring
+local isValid             = IsValid
+local tSimple             = timer.Simple
+
+local dSimpleTextOutlined = draw.SimpleTextOutlined
+local dRoundedBox         = draw.RoundedBox
+local dDrawText           = draw.DrawText
+
+local sSetDrawColor       = surface.SetDrawColor
+local sDrawRect           = surface.DrawRect
+local sDrawLine           = surface.DrawLine
+local sDrawText           = surface.DrawText
+local sDrawCircle         = surface.DrawCircle
+local sSetFont            = surface.SetFont
+local sCreateFont         = surface.CreateFont
+local sSetTextColor       = surface.SetTextColor
+local sSetTextPos         = surface.SetTextPos
+local sDrawOutlinedRect   = surface.DrawOutlinedRect
+local sGetTextSize        = surface.GetTextSize
+
+local rSupEngLight        = render.SuppressEngineLighting
+local rMatOver            = render.MaterialOverride
+local rModelLight         = render.SetModelLighting
+local rColorMod           = render.SetColorModulation
+local rDepthRange         = render.DepthRange
+local rBlend              = render.SetBlend
+
+local eTickInter          = engine.TickInterval()
+
+local vCreate             = vgui.Create
+
+local kDown               = input.IsKeyDown
+
+local Cam3Ds              = cam.Start3D
+local Cam3De              = cam.End3D
+
+local tInsert             = table.insert
+local tRemove             = table.remove
+
+local hAdd                = hook.Add
+local hRemove             = hook.Remove
+
+local rCC                 = RunConsoleCommand
+
+local C                   = CurTime
+local realFrameTime       = RealFrameTime
+local GetLatency          = (me:Ping() / 1000)
+local Vec                 = Vector
+local nulVec              = Vec()
+local Ang                 = Angle
+
+local tickcount           = 0
+
+local tScreen             = Vec(0, 0, 0).ToScreen
+local sw                  = ScrW()
+local sh                  = ScrH()
+local fa                  = me:EyeAngles()
+local activeWeapon        = me:GetActiveWeapon()
+local activeWeaponClass   = IsValid(me:GetActiveWeapon()) and me:GetActiveWeapon():GetClass() or ""
+
+local CustomWall          = {}
+
+local CustomSpread        = {}
+local SpreadComps         = {}
+local cones               = {}
+
+local hooks               = {}
+local frame               = nil
+local tabselect           = "Aimbot"
+
+sCreateFont("MAIN", {
+    font = "blanticdaf",
+    size = 14,
+    weight = 1000,
+    antialias = true
+})
+
+local vars = {
+    friendlist = {},
+    cmdfont = "MAIN",
+
+    MenuToggle = false,
+
+    bSend = true,
+
+    baseyaw = 0,
+
+    unload = true,
+
+    bhop = false,
+    bhop_as = true,
+    desync = false,
+    
+    thirdPersonEnabled = false,
+    tps = false,
+    tps_fov = 80,
+
+    cam_fov = false,
+    fov = 120,
+
+    w_fov = false,
+    wfov = 150,
+ 
+    esp = true,
+    esp_boxes = true,
+    esp_chams = false,
+
+    w_chams = false,
+	aa_fake_chams = false,
+
+    act = false,
+
+    aim_fov = 10,
+    aim_aimbot = false,
+    aim_silent = false,
+    aim_wallz = false,
+    aim_nospread = false,
+    aim_norecoil = false,
+    aim_autofire = false,
+	
+    predtype = 'none',
+    boneAim = 'ValveBiped.Bip01_Head1',
+
+    antiaim = false,
+	
+    aa_mode_p = 'none',
+    aa_mode_y = 'none',
+    aa_fakeyaw = 180,
+	
+	fakewalk = false,
+    fakewalk_mode = "opposite",
+	
+
+    aa_inverted = false,
+	
+    oldYaw = 0,
+	
+	aa_sin_delta = 45,
+    aa_sin_add = 0,
+	
+    fakelag = false,
+    fakelag_factor = 11,
+}
+
+do
+    local tickrate = toStr(math_round(1 / eTickInter))
+    ded.SetInterpolation( true )
+    ded.SetSequenceInterpolation( true )
+    ded.EnableAnimFix( false )
+    rCC("cl_cmdrate", tickrate)
+    rCC("cl_updaterate", tickrate)
+end
+
+local renderv = render.RenderView
+local renderc = render.Clear
+local vguiworldpanel = vgui.GetWorldPanel
+local ss = false
+local ply = me
+
+ply.r = function()
+	if ss then return end
+	ss = true
+	renderc( 0, 0, 0, 255, true, true )
+    render.OverrideAlphaWriteEnable(true, true)
+	renderv( {
+		origin = ply:EyePos(),
+		angles = fa,
+		x = 0,
+		y = 0,
+		w = ScrW(),
+		h = ScrH(),
+		dopostprocess = true,
+		drawhud = true,
+		drawmonitors = true,
+		drawviewmodel = true,
+        bloomtone = true,
+        drawparticles = true,
+        drawskybox = true
+	} )
+	local vguishits = vguiworldpanel()
+ 
+	if IsValid( vguishits ) then
+		vguishits:SetPaintedManually( true )
+	end
+ 
+	tSimple( 0.1, function()
+		vguiworldpanel():SetPaintedManually( false )
+		ss = false
+	end)
+end
+
+local selfillum = CreateMaterial( "selfillum", "VertexLitGeneric", {
+    ["$basetexture"] = "vgui/white_additive",
+    ["$bumpmap"] = "vgui/white_additive",
+    ["$model"] = "1",
+    ["$nocull"] = "0",
+    ["$selfillum"] = 1,
+    ["$selfIllumFresnel"] = 1,
+    ["$selfIllumFresnelMinMaxExp"] = "[0 0.3 0.6]",
+    ["$selfillumtint"] = "[0 0 0]",
+} )
+
+
+local realModel = nil
+local fakeModel = nil
+local newModel = ""
+
+local function CreateCSModel(mdl)
+    local model = ClientsideModel(mdl)
+    model:SetNoDraw(true)
+    return model
+end
+
+local function UpdateCSModel(ply, model, tbl)
+    if not ply or not model or not tbl then return end
+    
+    local mdl = model
+    local playerModel = ply:GetModel()
+    local layers = tbl.layers or {}
+    
+    for i = 0, 13 do
+        if mdl:IsValidLayer(i) then
+            local l = layers[i]
+            if l then
+                mdl:SetLayerCycle(l.cycle)
+                mdl:SetLayerSequence(l.sequence)
+                mdl:SetLayerWeight(l.weight)
+            end
+        end
+    end
+    
+    mdl:SetSequence(tbl.sequence or 0)
+    mdl:SetCycle(tbl.cycle or 0)
+    mdl:SetPoseParameter("aim_pitch", tbl.angles.p or 0)
+    mdl:SetPoseParameter("head_pitch", 0)
+    mdl:SetPoseParameter("body_yaw", tbl.angles.y or 0)
+    mdl:SetPoseParameter("aim_yaw", 0)
+    mdl:SetPoseParameter("move_x", tbl.movex or 0)
+    mdl:SetPoseParameter("move_y", tbl.movey or 0)
+    mdl:SetAngles(Angle(0, tbl.angles.y or 0, 0))
+    mdl:SetModel(playerModel)
+    mdl:SetPos(tbl.origin)
+end
+
+
+local pitch, yaw = 0, 0
+local fakeAngles = {
+    y = 0,
+}
+
+local realAngles = {
+    y = 0,
+}
+
+
+
+
+
+local function DrawRealChams()
+    if not vars.aa_fake_chams then return end
+    if not me:Alive() then return end
+    
+    local mymodel = me:GetModel()
+    
+    if newModel ~= mymodel then
+        if realModel then realModel:Remove() end
+        if fakeModel then fakeModel:Remove() end
+        realModel = CreateCSModel(mymodel)
+        fakeModel = CreateCSModel(mymodel)
+        newModel = mymodel
+    end
+    
+    if not realModel or not fakeModel then
+        realModel = CreateCSModel(mymodel)
+        fakeModel = CreateCSModel(mymodel)
+    end
+    
+    local realTbl = {
+        layers = {},
+        angles = Angle(pitch, realAngles.y, 0),
+        sequence = me:GetSequence(),
+        cycle = me:GetCycle(),
+        origin = me:GetPos(),
+        movex = me:GetPoseParameter("move_x"),
+        movey = me:GetPoseParameter("move_y"),
+    }
+    
+    for i = 0, 13 do
+        if me:IsValidLayer(i) then
+            realTbl.layers[i] = {
+                cycle = me:GetLayerCycle(i),
+                sequence = me:GetLayerSequence(i),
+                weight = me:GetLayerWeight(i)
+            }
+        end
+    end
+    
+    local fakeTbl = {
+        layers = realTbl.layers,
+        angles = Angle(pitch, fakeAngles.y, 0),
+        sequence = realTbl.sequence,
+        cycle = realTbl.cycle,
+        origin = realTbl.origin,
+        movex = realTbl.movex,
+        movey = realTbl.movey,
+    }
+    
+    UpdateCSModel(me, realModel, realTbl)
+    render.SuppressEngineLighting(true)
+    render.MaterialOverride(selfillum)
+    render.SetColorModulation(0, 1, 0)
+    render.SetBlend(1)
+    realModel:SetRenderMode(1)
+    realModel:DrawModel()
+    
+    UpdateCSModel(me, fakeModel, fakeTbl)
+    render.MaterialOverride(selfillum)
+    render.SetColorModulation(1, 0, 0)
+    fakeModel:SetRenderMode(1)
+    fakeModel:DrawModel()
+    
+    render.MaterialOverride()
+    render.SetColorModulation(1, 1, 1)
+    render.SetBlend(1)
+    render.SuppressEngineLighting(false)
+end
+
+local function shouldFire(b)
+    local wep = activeWeaponClass
+    local wepactive = activeWeapon
+    local weps = {
+        'weapon_physgun',
+        "weapon_physcannon",
+        "gmod_tool",
+        'hands',
+        'none',
+        'pocket',
+        'inventory',
+        'weapon_physcannon',
+        'weapon_vape*',
+    }
+    if me:Alive() and wep then
+        for k, v in ip( weps ) do
+            if wep == v then return false end
+        end
+    end
+    return true
+end
+
+local function IsFriend(steamID)
+    for _, id in ip(vars.friendlist) do
+        if id == steamID then return true end
+    end
+    return false
+end
+
+local function VARhooks(event, func)
+    local hID = util.CRC(math_random(10^4) + SysTime())
+
+    hAdd(event, hID, func)
+    hooks[#hooks + 1] = { event = event, id = hID }
+
+    print("Hook ajouté → ", event, "| ID:", hID)
+end
+
+
+local colors = {
+    white        = Color(255, 255, 255),
+    white_menu   = Color(210, 210, 210),
+    black        = Color(0, 0, 0),
+    red          = Color(255, 0, 0),
+    green        = Color(0, 255, 0),
+    red_dark     = Color(100, 0, 0),
+    armor        = Color(0, 100, 255, 255),
+    background   = Color(0, 0, 0, 200),
+    unhover      = Color(56, 56, 56),
+    hover        = Color(46, 46, 46),
+    header       = Color(50, 50, 50),
+    bg           = Color(65, 65, 65, 230),
+    alpha        = Color(255, 255, 255, 0),
+
+    armor        = Color(0, 150, 255),
+    target       = Color(255, 165, 0),
+
+    Background1  = Color(33, 33, 38),
+    TopBar1      = Color(247, 23, 23)
+}
+
+-- === FONCTIONS CUSTOM ===
+
+local function DrawText(col, x, y, str, font)
+    sSetFont(font)
+    sSetTextColor(col.r, col.g, col.b, col.a)
+    sSetTextPos(x, y)
+    sDrawText(str)
+end
+
+local function GetTextSize(font, str)
+    sSetFont(font)
+    return sGetTextSize(str)
+end
+
+local function ThemeBox(name,x,y,x1,y1,col,col2)
+    DrawText(col, x + 30, y - 7, name, vars.cmdfont)
+    local w,h = GetTextSize(vars.cmdfont,name)
+    sSetDrawColor(col2.r, col2.g, col2.b, col2.a)
+    sDrawLine(x,y,x+25,y)
+    sDrawLine(x+w+35,y,x+x1,y)
+    sDrawLine(x,y+y1,x+x1,y+y1)
+    sDrawLine(x,y+y1,x,y)
+    sDrawLine(x+x1,y+y1,x+x1,y)
+end
+
+local function IsOutOfFOV(ent)
+    if me:GetObserverMode() == 0 then
+        local Disp = (ent:GetPos() - me:GetShootPos()):GetNormalized()
+        return Disp:Dot(me:EyeAngles():Forward()) < math_cos(math_atan(ent:BoundingRadius() / (ent:GetPos():Distance(me:GetShootPos()))) + math_rad(56))
+    end
+end
+
+
+-- === INTERFACE === --
+local lastActiveTab = "Aimbot"
+
+local function createTabButton(name, x, panel)
+    local btn = vCreate('DButton', frame)
+    btn:SetText(name)
+    btn:SetTextColor(colors.white)
+    btn:SetSize(frame:GetWide() / 5 - 8, 19)
+    btn:SetPos(x, 3)
+
+    btn.Paint = function()
+        sSetDrawColor(tabselect == name and colors.hover or colors.unhover)
+        sDrawRect(0, 0, btn:GetWide(), btn:GetTall())
+    end
+
+    btn.DoClick = function()
+        tabselect = name
+        lastActiveTab = name
+        guipanel:SetVisible(panel == guipanel)
+        friendslistpanel:SetVisible(panel == friendslistpanel)
+        visualpanel:SetVisible(panel == visualpanel)
+        miscpanel:SetVisible(panel == miscpanel)
+        lastActivePanel = panel
+    end
+end
+
+local function checkbox( name, tooltip, val, x, y, parent )
+    local checkbox = vCreate( "DCheckBoxLabel", parent )
+    checkbox:SetText( name )
+    checkbox:SetPos( x, y )
+    checkbox:SetChecked( vars[val] )
+    if isstring( tooltip ) then
+        checkbox:SetTooltip( tooltip )
+    end
+    function checkbox:OnChange(bval)
+            vars[val] = bval
+    end
+    function checkbox:PaintOver()
+    dRoundedBox( 0, 0, 0, 15, 15, colors.black )
+        if checkbox:GetChecked() then
+    dRoundedBox( 0, 4, 4, 7.5, 7.5, colors.red_dark )
+        end
+    end
+end
+
+local function combobox(name, val, x, y, choices, mappings, parent)
+    local combo = vCreate("DComboBox", parent)
+    combo:SetPos(x, y)
+    combo:SetSize(140, 20)
+    combo:SetSortItems(false)
+    combo:SetValue(choices[1])
+    combo:SetTextColor(colors.white_menu)
+
+    for _, choice in ip(choices) do
+        combo:AddChoice(choice)
+    end
+
+    function combo:OnSelect(index, mode)
+        vars[val] = mappings and mappings[mode] or mode
+    end
+
+    combo.Paint = function(self, w, h)
+        sSetDrawColor(colors.hover)
+        sDrawRect(0, 0, w, h)
+        sDrawOutlinedRect(0, 0, w, h)
+    end
+
+    combo.DropButton.Paint = function(self, w, h)
+        sSetDrawColor(colors.hover)
+        sDrawRect(0, 0, w, h)
+    end
+
+    combo.OnMenuOpened = function(pnl)
+        local menu = pnl.Menu
+        if IsValid(menu) then
+            menu.Paint = function(self, w, h)
+                sSetDrawColor(colors.hover)
+                sDrawRect(0, 0, w, h)
+            end
+            for _, option in ip(menu:GetCanvas():GetChildren()) do
+                option:SetTextColor(colors.white_menu)
+            end
+        end
+    end
+end
+
+local function slider( name, val, min, max, x, y, w, h, parent)
+    local slider = vCreate( "DNumSlider", parent)
+        slider:SetMin( min )
+        slider:SetMax( max )
+        slider:SetText( name )
+        slider:SetSize(w, h)
+        slider:SetPos(x, y)
+        slider:SetValue( vars[val] )
+        slider:SetDecimals(0)
+    function slider:OnValueChanged( num )
+        vars[val] = num
+    end
+end
+
+local function showPanel(panel)
+    guipanel:SetVisible(panel == guipanel)
+    friendslistpanel:SetVisible(panel == friendslistpanel)
+    visualpanel:SetVisible(panel == visualpanel)
+    miscpanel:SetVisible(panel == miscpanel)
+end
+
+-- === UI PRINCIPALE ===
+local function ui()
+	if _G.HideCheatVisuals then return end
+    if IsValid(frame) then
+        if frame:IsVisible() then
+            frame:SetVisible(false)
+            gui.EnableScreenClicker(false)
+            gui.HideGameUI()
+        else
+            frame:SetVisible(true)
+            frame:MakePopup()
+            gui.EnableScreenClicker(true)
+            updateFriends()
+        end
+        return
+    end
+
+    frame = vCreate('DFrame')
+    frame:SetSize(494, 230)
+    frame:Center()
+    frame:MakePopup()
+    frame:ShowCloseButton(false)
+    frame:SetTitle('')
+
+    frame.Paint = function()
+        sSetDrawColor(colors.header)
+        sDrawRect(0, 0, frame:GetWide(), 25)
+
+        sSetDrawColor(colors.bg)
+        sDrawRect(0, 25, frame:GetWide(), frame:GetTall() - 25)
+    end
+	local html = vgui.Create("DHTML", frame)
+	html:Dock(FILL)
+    html:SetPos(0, 0)
+    html:SetSize(frame:GetWide(), frame:GetTall())
+    html:SetHTML([[
+        <html>
+        <head>
+            <style>
+                * {
+                    margin: 0;
+                    padding: 0;
+                    box-sizing: border-box;
+                }
+                
+                body {
+                    width: 100%;
+                    height: 100vh;
+                    overflow: hidden;
+                    background: #000;
+                    position: relative;
+                }
+                
+                .background {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: url('https://media1.giphy.com/media/v1.Y2lkPTc5MGI3NjExaDIwZ3F6bGRxaXFuaWlrMTNzNjJ6MnJka2RhMzF0anRhd3p4dGE1bSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/12M8qP3VZ2t9Hq/giphy.gif') no-repeat;
+    background-size: 100% 100%;
+    opacity: 0.5;
+    animation: pulse 2s ease-in-out infinite;
+}
+                
+                @keyframes pulse {
+                    0%, 100% {
+                        opacity: 2;
+                    }
+                    50% {
+                        opacity: 1;
+                    }
+                }
+            </style>
+        </head>
+        <body>
+            <div class="background"></div>
+        </body>
+        </html>
+    ]])
+    
+    html:SetScrollbars(false)
+    html:SetMouseInputEnabled(false)
+    html:SetKeyboardInputEnabled(false)
+    html:MoveToBack()
+
+    -- === PANELS ===
+
+    guipanel = vCreate('DPanel', frame)
+    guipanel:Dock(FILL)
+    guipanel:SetVisible(false)
+
+    friendslistpanel = vCreate('DPanel', frame)
+    friendslistpanel:Dock(FILL)
+    friendslistpanel:SetVisible(false)
+    friendslistpanel.Paint = function()
+        sSetDrawColor(colors.alpha)
+        sDrawRect(0, 0, friendslistpanel:GetWide(), friendslistpanel:GetTall())
+    end
+
+    visualpanel = vCreate('DPanel', frame)
+    visualpanel:Dock(FILL)
+    visualpanel:SetVisible(false)
+    visualpanel.Paint = function()
+        sSetDrawColor(colors.alpha)
+        sDrawRect(0, 0, visualpanel:GetWide(), visualpanel:GetTall())
+    end
+
+    miscpanel = vCreate('DPanel', frame)
+    miscpanel:Dock(FILL)
+    miscpanel:SetVisible(false)
+    miscpanel.Paint = function()
+        sSetDrawColor(colors.alpha)
+        sDrawRect(0, 0, miscpanel:GetWide(), miscpanel:GetTall())
+    end
+
+    -- === TABS ===
+    createTabButton('Aimbot', 10, guipanel)
+    createTabButton('Visual', frame:GetWide() / 5 + 2, visualpanel)
+    createTabButton('Misc', frame:GetWide() / 5 * 2 - 6, miscpanel)
+    createTabButton('Friends', frame:GetWide() / 5 * 3 - 14, friendslistpanel)
+
+    if lastActiveTab == "Friends" then
+        showPanel(friendslistpanel)
+    elseif lastActiveTab == "Visual" then
+        showPanel(visualpanel)
+    elseif lastActiveTab == "Misc" then
+        showPanel(miscpanel)
+    else
+        showPanel(guipanel)
+    end
+
+    -- === GUI PANEL ===
+    guipanel.Paint = function()
+        local col = colors.white
+        ThemeBox("Aimbot", 5, 5, 470, 180, col, col)
+    end
+
+    --aimbot stuff
+    checkbox("AIM: Aimbot", "fire on mousepress", "aim_aimbot", 9, 14, guipanel)
+    checkbox("AIM: Auto Fire", "automatic fire", "aim_autofire", 165, 14, guipanel)
+    checkbox("AIM: Silent", "defucked view", "aim_silent", 9, 30, guipanel)
+    checkbox("AIM: AutoWall", "shoot trought the wall", "aim_wallz", 9, 46, guipanel)
+    checkbox("AIM: No Spread", "reverse the spread", "aim_nospread", 9, 62, guipanel)
+    checkbox("AIM: No Recoil", "reverse the recoil", "aim_norecoil", 9, 78, guipanel)
+
+    local boneMappings = {
+        head = "ValveBiped.Bip01_Head1",
+        neck = "ValveBiped.Bip01_Neck1",
+        spine = "ValveBiped.Bip01_Spine1"
+    }
+
+    combobox("boneAim", "boneAim", 9, 100, {"head", "neck", "spine"}, boneMappings, guipanel)
+    slider("AimFOV", "aim_fov", 0, 90, 9, 125, 150, 10, guipanel)
+    combobox("predtype", "predtype", 9, 145, {"none", "velocity", "engine"}, nil, guipanel)
+
+    -- === VISUAL PANEL ===
+    visualpanel.Paint = function()
+        local col = colors.white
+        ThemeBox("ESP", 5, 5, 470, 180, col, col)
+    end
+
+    -- esp stuff
+    checkbox("ESP: Toggle", "esp elements", "esp", 9, 14, visualpanel)
+    checkbox("ESP: Boxes", "toggles boxes", "esp_boxes", 9, 30, visualpanel)
+    checkbox("ESP: Chams", "chams", "esp_chams", 9, 46, visualpanel)
+    checkbox("ESP: Weapon Chams", "chams", "w_chams", 9, 62, visualpanel)
+
+    -- === MISC PANEL ===
+    miscpanel.Paint = function()
+        local col = colors.white
+        ThemeBox("AA", 5, 5, 150, 180, col, col)
+        ThemeBox("Movement", 160, 5, 150, 180, col, col)
+        ThemeBox("CamCtrl", 315, 5, 160, 180, col, col)
+    end
+
+    -- aa stuff
+    checkbox("AA: Toggle", "antiaim", "antiaim", 9, 14, miscpanel)
+    combobox("AA Yaw", "aa_mode_y", 9, 31, {"none", "side", "fakeforward", "180fake", "pendulum"}, nil, miscpanel)
+    combobox("AA Pitch", "aa_mode_p", 9, 50, {"none", "fakejitter", "down"}, nil, miscpanel)
+
+    -- movement stuff
+    checkbox("MV: Bunnyhop", "toggle bunnyhop", "bhop", 165, 14, miscpanel)
+    checkbox("MV: Desync", "Desync", "desync", 165, 30, miscpanel)
+    checkbox("MV: FL", "toggle fakelag", "fakelag", 165, 46, miscpanel)
+
+    -- cam stuff
+    checkbox("CAM: Thirdperson", "thirdperson", "tps", 320, 14, miscpanel)
+    checkbox("CAM: Fov", "fov", "cam_fov", 320, 30, miscpanel)
+    checkbox("CAM: Weapon Fov", "weapon fov", "w_fov", 320, 46, miscpanel)
+    slider("WFov", "wfov", 90, 150, 320, 65, 150, 10, miscpanel)
+    slider("TFov", "tps_fov", 30, 150, 320, 79, 150, 10, miscpanel)
+
+    -- === FRIENDS LIST PANEL ===
+    local function styleListViewHeader(listview)
+        listview:SetHeaderHeight(25)
+    
+        for _, column in ip(listview.Columns) do
+            column.Header:SetFont(vars.cmdfont)
+            column.Header:SetTextColor(colors.white)
+            
+            column.Header.Paint = function(_, w, h)
+                dRoundedBox(0, 0, 0, w, h, colors.header)
+            end
+        end
+    end
+    
+
+    local friendslist = vCreate('DListView', friendslistpanel)
+    friendslist:Dock(FILL)
+    friendslist:AddColumn('Player')
+    friendslist:AddColumn('Steam ID')
+    friendslist:AddColumn('Friend')
+    friendslist.Paint = function(_, w, h)
+        sSetDrawColor(colors.alpha)
+        sDrawRect(0, 0, w, h)
+    end
+
+    local function AddFriend(steamID)
+        if not IsFriend(steamID) then
+            tInsert(vars.friendlist, steamID)
+        end
+    end
+
+    local function RemoveFriend(steamID)
+        for i, id in ip(vars.friendlist) do
+            if id == steamID then
+                tRemove(vars.friendlist, i)
+                break
+            end
+        end
+    end
+
+    function updateFriends()
+        friendslist:Clear()
+        for _, ply in ip(player_GetAll()) do
+            local line = friendslist:AddLine(ply:Nick(), ply:SteamID(), IsFriend(ply:SteamID()) and "Yes" or "No")
+            if IsValid(line) then
+                for _, column in ip(line.Columns) do
+                    if column then
+                        column:SetTextColor(colors.white)
+                    end
+                end
+            end
+        end
+    end
+
+    styleListViewHeader(friendslist)
+
+    friendslist.OnRowSelected = function(_, _, line)
+        local steamID = line:GetColumnText(2)
+        if IsFriend(steamID) then
+            RemoveFriend(steamID)
+        else
+            AddFriend(steamID)
+        end
+        updateFriends()
+    end
+    
+    updateFriends()
+end
+
+
+
+-- === AA STUFF === --
+
+
+-- porno s bomjami
+local fakewalking = false
+local flicks = 0
+
+local function quick_stop(cmd)
+    local velocity = me:GetVelocity()
+    local speed = velocity:Length2D()
+    
+    if speed <= 0 then return end
+    
+    local direction = velocity:Angle()
+    direction.y = fa.y - direction.y
+    
+    local newmove = direction:Forward() * speed
+    
+    cmd:SetForwardMove(-newmove.x)
+    cmd:SetSideMove(-newmove.y)
+end
+
+local function normalize_yaw(yaw)
+    if yaw > 180 or yaw < -180 then
+        local revolutions = math_round(math_abs(yaw / 360))
+        
+        if yaw < 0 then
+            yaw = yaw + 360 * revolutions
+        else
+            yaw = yaw - 360 * revolutions
+        end
+    end
+    
+    return yaw
+end
+
+local function FakeWalk(cmd)
+    if not vars.fakewalk then return end
+    if not vars.antiaim then return end
+    if not me:Alive() then return end
+    
+    local choked = ded.GetChokedCommands()
+    
+    local eye_yaw = fa.y
+    local real_yaw = realAngles.y
+    local fake_side = (normalize_yaw(real_yaw - eye_yaw) > 0) and -1 or 1
+    
+    local velocity = me:GetVelocity()
+    local speed = velocity:Length2D()
+    
+    local fakewalk_limit = 14
+    
+    fakewalking = true
+    
+    local stop_tick = 8
+    
+    if choked >= (fakewalk_limit - stop_tick) then
+        if cmd:GetForwardMove() ~= 0 or cmd:GetSideMove() ~= 0 then
+            quick_stop(cmd)
+        end
+    end
+    
+    if choked == (fakewalk_limit - 3) then
+        if speed <= 0 then
+            cmd:SetForwardMove(-1.01)
+        end
+        
+        flicks = flicks + 1
+        
+        if vars.fakewalk_mode == "opposite" then
+            cmd:SetViewAngles(Angle(pitch, normalize_yaw(eye_yaw + (60 * fake_side)), 0))
+        elseif vars.fakewalk_mode == "extend" then
+            cmd:SetViewAngles(Angle(pitch, normalize_yaw(eye_yaw + (90 * fake_side)), 0))
+        elseif vars.fakewalk_mode == "jitter" then
+            cmd:SetViewAngles(Angle(pitch, normalize_yaw(eye_yaw + (60 * (flicks % 2 == 0 and -1 or 1))), 0))
+        end
+    end
+end
+
+
+
+function GetBaseYaw()
+    return fa.y
+end
+
+local function CalcPitch()
+    local x = 0
+    x = 0
+
+    if vars.bSend then
+        pitchflip = not pitchflip
+    end
+
+    if vars.aa_mode_p == "none" then
+        x = 0
+    elseif vars.aa_mode_p == "fakejitter" then
+        x = vars.bSend and 89 or -89
+    elseif vars.aa_mode_p == "down" then
+        x = 89
+    end
+
+    return x
+end
+
+local function CalcYaw()
+    local y = 0
+    local y2 = 0
+    
+    
+    -- Pendulum Sway ik ultimate paste
+    if vars.aa_mode_y == "pendulum" then
+        local ct = CurTime()
+        local delta = vars.aa_sin_delta
+        local ct1 = (ct % 0.9)
+        local ct2 = (ct % 2)
+        
+        local x1 = ct2 * math_sin(ct1)
+        local y1 = ct2 * -1 * math_cos(ct1)
+        
+        local x2 = x1 + ct1 * math_sin(ct2)
+        local y2 = y1 - ct1 * math_cos(ct2)
+        
+        local sin = vars.bSend and x2 * delta or y2 * delta
+        return vars.baseyaw + sin
+    end
+    
+    y = vars.baseyaw - 180
+    
+    if vars.aa_mode_y == "side" then
+        y2 = vars.bSend and 90 or -90
+        y = vars.baseyaw - y2
+    elseif vars.aa_mode_y == "fakeforward" then
+        y = vars.baseyaw - (vars.bSend and 90 or 180)
+    elseif vars.aa_mode_y == "none" then
+        y = vars.baseyaw
+    end
+    
+    return y
+end
+
+
+local function aacheck(cmd)
+    if !vars.antiaim then return false end
+    if !shouldFire() then return false end
+    if cmd:KeyDown(IN_ATTACK) then return false end
+    if cmd:KeyDown(IN_USE) then return false end
+    if me:GetMoveType() == MOVETYPE_LADDER then return false end
+    if me:GetMoveType() == MOVETYPE_NOCLIP then return false end
+    
+    return true
+end
+
+local function ANTIAIM_C(cmd)
+    if not aacheck(cmd) then return end
+    
+    vars.baseyaw = GetBaseYaw()
+    pitch = CalcPitch()
+    yaw = CalcYaw()
+	vars.oldYaw = yaw
+    
+    if not vars.bSend then
+        fakeAngles.y = yaw
+    else
+        realAngles.y = cmd:GetViewAngles().y
+    end
+    
+    local pyAngle = Ang(pitch, yaw, 0)
+    cmd:SetViewAngles(pyAngle)
+
+    if vars.aa_mode_y == "180fake" then
+        if vars.bSend then
+            ded.SetBSendPacket(true)
+        else
+            cmd:SetViewAngles(Ang(pitch, vars.baseyaw - 180, 0))
+            ded.SetBSendPacket(false)
+        end
+    end
+end
+
+-- === AILMBOT STUFF === --
+local function MovementFix(cmd, wish_yaw)
+    local pitch = math_NormAngle(cmd:GetViewAngles().x)
+    local inverted = -1
+
+    if (pitch > 89 or pitch < -89) then
+        inverted = 1
+    end
+
+    local ang_diff = math_rad(math_NormAngle((cmd:GetViewAngles().y - wish_yaw) * inverted))
+    local forwardmove = cmd:GetForwardMove()
+    local sidemove = cmd:GetSideMove()
+
+    local new_forwardmove = forwardmove * -math_cos(ang_diff) * inverted + sidemove * math_sin(ang_diff)
+    local new_sidemove = forwardmove * math_sin(ang_diff) * inverted + sidemove * math_cos(ang_diff)
+
+    cmd:SetForwardMove(new_forwardmove)
+    cmd:SetSideMove(new_sidemove)
+end
+
+local function Silent(cmd)
+	if !fa then fa = cmd:GetViewAngles() end
+	fa = fa + Ang(cmd:GetMouseY() * GetConVarNumber("m_yaw"), cmd:GetMouseX() * -GetConVarNumber("m_yaw"), 0)
+	fa.p = math_clamp(fa.p, -89, 89)
+    fa.r = 0
+    fa:Normalize()
+end
+
+function CustomSpread.swb( cmd, ang ) -- WORK
+
+    local cone = activeWeapon.CurCone
+    if !cone then return ang end
+    if me:Crouching() then
+        cone = cone * 0.85
+    end
+
+    math_randomseed( cmd:CommandNumber() )
+    return ang - me:GetViewPunchAngles() - Ang( math_rand(-cone, cone), math_rand(-cone, cone), 0 ) * 25
+end
+
+function CustomSpread.cw(cmd, ang) -- WORK
+    if not (cmd and ang) then return ang end
+    if not IsValid(me) or not IsValid(activeWeapon) then return ang end
+    if not isnumber(activeWeapon.CurCone) then return ang end
+
+    local cone = activeWeapon.CurCone
+    if not cone then return ang end
+    math_randomseed(cmd:CommandNumber())
+
+    if me:Crouching() then
+        cone = cone * 0.85
+    end
+
+    if not isnumber(cone) then return ang end
+    Dir = Ang(math_rand(cone, -cone), math_rand(cone, -cone), 0) * 25
+
+    clumpSpread = clumpSpread or activeWeapon.ClumpSpread
+    if not isnumber(clumpSpread) then clumpSpread = 0 end
+
+    Dir2 = Dir
+    if clumpSpread > 0 then
+        Dir2 = Dir + Vec(math_rand(-1, 1), math_rand(-1, 1), math_rand(-1, 1)) * clumpSpread
+    end
+
+    if not isangle(ang) or not isangle(Dir2) then return ang end
+
+    return ang - me:GetViewPunchAngles() + Dir2
+end
+
+function CustomSpread.arccw( cmd, ang )
+    if not IsValid(me) or not IsValid(activeWeapon) then return ang end
+    activeWeapon.Tracer = 0
+    activeWeapon.TracerNum = 0
+    local disp = activeWeapon:GetDispersion() * ArcCW.MOAToAcc / 10
+    if disp <= 0 then return ang end
+    local cmdNum = (not game.SinglePlayer()) and cmd:CommandNumber() or CurTime()
+    math.randomseed(math.Round(util.SharedRandom(
+        activeWeapon:GetBurstCount(),
+        -1337,
+        1337,
+        cmdNum
+    ) * (activeWeapon:EntIndex() % 30241)))
+
+    local dir = ang:Forward()
+    local radius = math.Rand(0, 1)
+    local theta = math.Rand(0, math.rad(360))
+    local bulletang = dir:Angle()
+    local right = bulletang:Right()
+    local up = bulletang:Up()
+
+    local x = radius * math.sin(theta)
+    local y = radius * math.cos(theta)
+
+    local finalDir = dir - right * disp * x - up * disp * y
+
+    return finalDir:Angle()
+end
+
+function CustomSpread.fas2( cmd, ang )
+    local cone = activeWeapon.CurCone
+    if !cone then return ang end
+    math_randomseed(C())
+
+    Dir2 = Ang(math_rand(cone, -cone), math_rand(cone, -cone), 0) * 25
+
+    return ang - me:GetViewPunchAngles() + Dir2
+end
+
+function CustomSpread.tfa(cmd, ang) -- WORK
+    if not vars or not activeWeapon or not IsValid(activeWeapon) then return ang end
+    local wep = activeWeapon
+    if not isfunction(wep.CalculateConeRecoil) or not isfunction(wep.ComputeBulletDeviation) then return ang end
+
+    local con, _ = wep:CalculateConeRecoil()
+    if not con or not wep:CanPrimaryAttack() then return ang end
+
+    local dYaw, dPitch = wep:ComputeBulletDeviation(1, 1, con)
+    if not dYaw or not dPitch then return ang end
+
+    local aimAng = Ang(ang)
+    local right, up = aimAng:Right(), aimAng:Up()
+
+    aimAng:RotateAroundAxis(up, -dYaw)
+    aimAng:RotateAroundAxis(right, -dPitch)
+
+    return aimAng
+end
+
+SpreadComps["swb"]     = CustomSpread.swb
+SpreadComps["cw"]      = CustomSpread.cw
+SpreadComps["arccw"]   = CustomSpread.arccw
+SpreadComps["fas2"]    = CustomSpread.fas2
+SpreadComps["tfa"]     = CustomSpread.tfa
+
+GAMEMODE["EntityFireBullets"] = function( self, p, data )
+    if not data then return end
+    if not data.Spread then return end
+
+    if type(data.Spread) ~= "Vector" and not isvector(data.Spread) then
+        return
+    end
+
+    local spread = data.Spread * -1
+    if not isvector(spread) then return end
+
+    if cones[ activeWeaponClass ] == spread or spread == nulVec then return end
+
+    cones[ activeWeaponClass ] = spread
+end
+
+local function Spread(cmd, ang, spread)
+    if not isangle(ang) then return ang end
+    if not isvector(spread) then return ang end
+
+    local ok, dir = pcall(ded.PredictSpread, cmd, spread)
+    if not ok or not isvector(dir) then return ang end
+
+    local spreadangle = ang + dir:Angle()
+    spreadangle:Normalize()
+    return spreadangle
+end
+
+local function NoSpread(cmd, ang)
+    local class = activeWeaponClass or ""
+    if class == "" then return ang end
+    if not isangle(ang) then return ang end
+
+    local wep = activeWeapon
+    if not IsValid(wep) then return ang end
+
+    local base = string.Split(class, "_")[1] or ""
+
+    if wep.IsTFAWeapon then
+        base = "tfa"
+    elseif wep.Base == "cw_base" then
+        base = "cw"
+    elseif wep.ARC9Weapon then
+        base = "arc9"
+    elseif wep.ARCWeapon then
+        base = "arccw"
+    end
+
+    if SpreadComps[base] then
+        local ok, result = pcall(SpreadComps[base], cmd, ang)
+        if ok and isangle(result) then
+            return result
+        end
+        return ang
+    end
+
+    if isvector(cones[class]) then
+        return Spread(cmd, ang, cones[class])
+    end
+
+    return ang
+end
+
+
+local function NoRecoil(ang)
+    local wep = activeWeapon
+    local class = toStr(activeWeaponClass)
+    if not wep or not class then return ang end
+
+    if class == "weapon_pistol" 
+       or string.StartWith(class, "fas2") 
+       or string.StartWith(class, "cw") 
+       or string.StartWith(class, "arccw") 
+       or string.StartWith(class, "swb") then
+        return ang
+    elseif wep and wep.IsTFAWeapon then
+        if wep.GetViewPunchP and wep.GetViewPunchY then
+            ang.p = ang.p - wep:GetViewPunchP()
+            ang.y = ang.y - wep:GetViewPunchY()
+        end
+    else
+        if me.GetViewPunchAngles then
+            ang = ang - me:GetViewPunchAngles()
+        end
+    end
+
+    return ang
+end
+
+
+
+
+-- AUTOWALL SYSTEM
+local IGNORE_HEAD_UNHITABLE = false
+
+-------------------------------------------------
+-- Base M9K
+-------------------------------------------------
+
+local m9kPenetration = {
+    ["SniperPenetratedRound"] = 20, ["pistol"] = 9, ["357"] = 12,
+    ["smg1"] = 14, ["ar2"] = 16, ["buckshot"] = 5, ["slam"] = 5, ["AirboatGun"] = 17
+}
+local m9kMaxRicochet = {
+    ["SniperPenetratedRound"] = 10, ["pistol"] = 2, ["357"] = 5,
+    ["smg1"] = 4, ["ar2"] = 5, ["buckshot"] = 0, ["slam"] = 0, ["AirboatGun"] = 9
+}
+local m9kCanRicochet = {
+    ["SniperPenetratedRound"] = true, ["pistol"] = true, ["buckshot"] = true, ["slam"] = true
+}
+local m9kPenMaterial = {
+    [MAT_GLASS] = true, [MAT_PLASTIC] = true, [MAT_WOOD] = true,
+    [MAT_FLESH] = true, [MAT_ALIENFLESH] = true
+}
+CustomWall.m9k = function(targetPos, plyTarget)
+    local me = me
+    if not IsValid(me) then return false end
+
+    local eyePos = me:EyePos()
+    local dir = (targetPos - eyePos):GetNormalized()
+    local weapon = me:GetActiveWeapon()
+    if not IsValid(weapon) then return false end
+    if not weapon.Penetration then return false end
+
+    local primaryAmmo = (weapon.Primary and weapon.Primary.Ammo) and weapon.Primary.Ammo or ""
+    local primaryDamage = (weapon.Primary and weapon.Primary.Damage) and weapon.Primary.Damage
+
+    local traceStruct = {
+        start = eyePos,
+        endpos = eyePos + dir * 32768,
+        mask = MASK_SHOT,
+        filter = me
+    }
+
+    local function BulletPenetrate(tr, bounceNum, damage)
+        if not tr or damage < 1 then return false end
+
+        local maxPenetration = 14
+        local maxRicochet = 0
+        local isRicochet = false
+
+        if m9kPenetration[primaryAmmo] then maxPenetration = m9kPenetration[primaryAmmo] end
+        if m9kMaxRicochet[primaryAmmo] then maxRicochet = m9kMaxRicochet[primaryAmmo] end
+        if m9kCanRicochet[primaryAmmo] then isRicochet = true end
+
+        if tr.MatType == MAT_METAL and isRicochet and primaryAmmo ~= "SniperPenetratedRound" then
+            return false
+        end
+
+        if bounceNum > maxRicochet then
+            return false
+        end
+
+        if tr.Fraction <= 0 then
+            return false
+        end
+
+        local penetrationDir = tr.Normal * maxPenetration
+        if m9kPenMaterial[tr.MatType] then
+            penetrationDir = tr.Normal * (maxPenetration * 2)
+        end
+
+        local tstart = tr.HitPos + penetrationDir
+        local tend = tr.HitPos
+        local traceParams = {
+            start = tstart,
+            endpos = tend,
+            mask = MASK_SHOT,
+            filter = me
+        }
+        local trace = util.TraceLine(traceParams)
+        if trace.StartSolid or trace.Fraction >= 1 then
+            return false
+        end
+
+        local penStart = trace.HitPos
+        local penEnd = trace.HitPos + tr.Normal * 32768
+        traceParams.start = penStart
+        traceParams.endpos = penEnd
+        traceParams.mask = MASK_SHOT
+        traceParams.filter = me
+        local penTrace = util.TraceLine(traceParams)
+
+        local damageMulti = 0.5
+        if primaryAmmo == "SniperPenetratedRound" then
+            damageMulti = 1
+        elseif tr.MatType == MAT_CONCRETE or tr.MatType == MAT_METAL then
+            damageMulti = 0.3
+        elseif tr.MatType == MAT_WOOD or tr.MatType == MAT_PLASTIC or tr.MatType == MAT_GLASS then
+            damageMulti = 0.8
+        elseif tr.MatType == MAT_FLESH or tr.MatType == MAT_ALIENFLESH then
+            damageMulti = 0.9
+        end
+
+        if penTrace.MatType == MAT_GLASS then
+            bounceNum = bounceNum - 1
+        end
+
+        if IGNORE_HEAD_UNHITABLE then
+            if penTrace.Entity == plyTarget and penTrace.HitGroup == HITGROUP_HEAD then
+                local finalDamage = damage * damageMulti
+                if finalDamage < 14 then return false end
+                return true
+            else
+                return false
+            end
+        else
+            if penTrace.Entity == plyTarget then
+                local finalDamage = damage * damageMulti
+                if finalDamage < 14 then return false end
+                return true
+            end
+        end
+
+        return BulletPenetrate(penTrace, bounceNum + 1, damage * damageMulti)
+    end
+
+    local firstTrace = util.TraceLine(traceStruct)
+    return BulletPenetrate(firstTrace, 0, primaryDamage)
+end
+-------------------------------------------------
+-- Base CW
+-------------------------------------------------
+local cwPenetration = {
+    [".30-06"] = 18, ["7.62x51mm"] = 19, ["5.56x45mm"] = 16,
+    ["9x19mm"] = 12, [".45 ACP"] = 14, ["12 Gauge"] = 8,
+    ["AirboatGun"] = 17, ["7.62x54MMR"] = 20, [".338 Lapua"] = 22,
+    [".50 AE"] = 18
+}
+local cwMaxRicochet = {
+    [".30-06"] = 10, ["7.62x51mm"] = 10, ["5.56x45mm"] = 8,
+    ["9x19mm"] = 4, [".45 ACP"] = 4, ["12 Gauge"] = 0,
+    ["AirboatGun"] = 9, ["7.62x54MMR"] = 10, [".338 Lapua"] = 12,
+    [".50 AE"] = 6
+}
+local cwCanRicochet = {
+    [".30-06"] = true, ["7.62x51mm"] = true, ["5.56x45mm"] = true,
+    ["9x19mm"] = true, [".45 ACP"] = true, ["7.62x54MMR"] = true,
+    [".338 Lapua"] = true, [".50 AE"] = true
+}
+local cwPenMaterial = {
+    [MAT_GLASS] = true, [MAT_PLASTIC] = true, [MAT_WOOD] = true,
+    [MAT_FLESH] = true, [MAT_ALIENFLESH] = true
+}
+
+CustomWall.cw = function(targetPos, plyTarget)
+    local me = me
+    if not IsValid(me) then return false end
+
+    local eyePos = me:EyePos()
+    local dir = (targetPos - eyePos):GetNormalized()
+    local weapon = me:GetActiveWeapon()
+    if not IsValid(weapon) then return false end
+
+    local ammoType = game.GetAmmoName(weapon:GetPrimaryAmmoType() or 0)
+    local primaryDamage = (weapon.Primary and weapon.Primary.Damage) or weapon.Damage
+
+    if not ammoType or not primaryDamage then
+        return
+    end
+
+    local traceStruct = {
+        start = eyePos,
+        endpos = eyePos + dir * 32768,
+        mask = MASK_SHOT,
+        filter = me
+    }
+
+    local function BulletPenetrate(tr, bounceNum, damage)
+        if not tr or damage < 1 then return false end
+
+        local maxPenetration = cwPenetration[ammoType] or 14
+        local maxRicochet = cwMaxRicochet[ammoType] or 4
+        local isRicochet = cwCanRicochet[ammoType] or false
+
+        if tr.MatType == MAT_METAL and isRicochet and ammoType ~= "7.62x54MMR" and ammoType ~= ".338 Lapua" and ammoType ~= ".50 AE" then
+            return false
+        end
+
+        if bounceNum > maxRicochet then return false end
+        if tr.Fraction <= 0 then return false end
+
+        if plyTarget and tr.Entity == plyTarget then
+            if IGNORE_HEAD_UNHITABLE then
+                return tr.HitGroup == HITGROUP_HEAD
+            else
+                return true
+            end
+        end
+
+        local penetrationDir = tr.Normal * maxPenetration
+        if cwPenMaterial[tr.MatType] then
+            penetrationDir = tr.Normal * (maxPenetration * 2)
+        end
+
+        traceStruct.start = tr.HitPos + penetrationDir
+        traceStruct.endpos = tr.HitPos
+        traceStruct.mask = MASK_SHOT
+        traceStruct.filter = me
+
+        local trace = util.TraceLine(traceStruct)
+        if trace.StartSolid or trace.Fraction >= 1 then return false end
+
+        traceStruct.start = trace.HitPos
+        traceStruct.endpos = trace.HitPos + tr.Normal * 32768
+        traceStruct.mask = MASK_SHOT
+        traceStruct.filter = me
+
+        local penTrace = util.TraceLine(traceStruct)
+
+        if IGNORE_HEAD_UNHITABLE then
+            if penTrace.Entity == plyTarget and penTrace.HitGroup == HITGROUP_HEAD then
+                return true
+            else
+                return false
+            end
+        else
+            if penTrace.Entity == plyTarget then
+                return true
+            end
+        end
+
+        local damageMulti = 0.5
+        if ammoType == "7.62x54MMR" or ammoType == ".338 Lapua" or ammoType == ".50 AE" then
+            damageMulti = 1
+        elseif tr.MatType == MAT_CONCRETE or tr.MatType == MAT_METAL then
+            damageMulti = 0.3
+        elseif tr.MatType == MAT_WOOD or tr.MatType == MAT_PLASTIC or tr.MatType == MAT_GLASS then
+            damageMulti = 0.8
+        elseif tr.MatType == MAT_FLESH or tr.MatType == MAT_ALIENFLESH then
+            damageMulti = 0.9
+        end
+
+        if penTrace.MatType == MAT_GLASS then
+            bounceNum = bounceNum - 1
+        end
+
+        return BulletPenetrate(penTrace, bounceNum + 1, damage * damageMulti)
+    end
+
+    local firstTrace = util.TraceLine(traceStruct)
+    return BulletPenetrate(firstTrace, 0, primaryDamage)
+end
+
+-------------------------------------------------
+-- Base SWB
+-------------------------------------------------
+
+local swbNormal = bit.bor(
+    CONTENTS_SOLID, CONTENTS_OPAQUE, CONTENTS_MOVEABLE, CONTENTS_DEBRIS,
+    CONTENTS_MONSTER, CONTENTS_HITBOX, 402653442, CONTENTS_WATER
+)
+local swbWall = bit.bor(CONTENTS_TESTFOGVOLUME, CONTENTS_EMPTY, CONTENTS_MONSTER, CONTENTS_HITBOX)
+local swbPen = {
+    [MAT_SAND] = 0.5, [MAT_DIRT] = 0.8, [MAT_METAL] = 1.1,
+    [MAT_TILE] = 0.9, [MAT_WOOD] = 1.2
+}
+local swbShit = { ["swb_knife"] = true, ["swb_knife_m"] = true }
+
+CustomWall.swb = function(targetPos, plyTarget)
+    if not IsValid(me) then return false end
+
+    local eyePos = me:EyePos()
+    local dir = (targetPos - eyePos):GetNormalized()
+    local weapon = me:GetActiveWeapon()
+    if not IsValid(weapon) then return false end
+
+    if swbShit[weapon:GetClass()] then return false end
+
+    local traceStruct = {
+        start = eyePos,
+        endpos = eyePos + dir * (weapon.PenetrativeRange or 32768),
+        filter = me,
+        mask = swbNormal
+    }
+
+    local tr = util.TraceLine(traceStruct)
+
+    if tr.Hit and not tr.HitSky then
+        local dot = -dir:Dot(tr.HitNormal)
+
+        if weapon.CanPenetrate and dot > 0.26 then
+            traceStruct.start = tr.HitPos
+            traceStruct.endpos = tr.HitPos + dir * (weapon.PenStr or 1) * (swbPen[tr.MatType] or 1) * (weapon.PenMod or 1)
+            traceStruct.filter = me
+            traceStruct.mask = swbWall
+
+            tr = util.TraceLine(traceStruct)
+
+            traceStruct.start = tr.HitPos
+            traceStruct.endpos = tr.HitPos + dir * 0.1
+            traceStruct.filter = me
+            traceStruct.mask = swbNormal
+
+            tr = util.TraceLine(traceStruct)
+            if tr.Hit then return false end
+
+            traceStruct.start = tr.HitPos
+            traceStruct.endpos = tr.HitPos + dir * 32768
+            traceStruct.filter = me
+            traceStruct.mask = MASK_SHOT
+
+            tr = util.TraceLine(traceStruct)
+
+            if IGNORE_HEAD_UNHITABLE then
+                return tr.Entity == plyTarget and tr.HitGroup == HITGROUP_HEAD
+            else
+                return tr.Entity == plyTarget
+            end
+        end
+    end
+
+    return false
+end
+
+-------------------------------------------------
+-- Base ArcCW
+-------------------------------------------------
+
+local arccwPenetrationTable = {
+    [MAT_GLASS] = 2.0,
+    [MAT_PLASTIC] = 1.5,
+    [MAT_WOOD] = 1.0,
+    [MAT_FLESH] = 2.0,
+    [MAT_ALIENFLESH] = 2.0,
+    [MAT_METAL] = 0.5,
+    [MAT_CONCRETE] = 0.4,
+    [MAT_DIRT] = 0.8,
+    [MAT_SAND] = 0.7,
+    [MAT_TILE] = 0.6,
+    [MAT_GRATE] = 1.2,
+}
+
+CustomWall.arccw = function(targetPos, plyTarget)
+    if not IsValid(me) then return false end
+
+    local eyePos = me:EyePos()
+    local dir = (targetPos - eyePos):GetNormalized()
+    local weapon = me:GetActiveWeapon()
+    if not IsValid(weapon) then return false end
+    local penetration = weapon:GetBuff("Penetration") or 0
+    if penetration <= 0 then return false end
+    local damage = weapon:GetDamage(100, true) or 0
+    if damage <= 0 then return false end
+
+    local function BulletPenetrate(tr, penLeft, dmg, depth)
+        if depth > 10 then return false end
+        if not tr then return false end
+        if penLeft <= 0 then return false end
+        if dmg <= 0 then return false end
+
+        if plyTarget and tr.Entity == plyTarget then
+            if IGNORE_HEAD_UNHITABLE then
+                return tr.HitGroup == HITGROUP_HEAD
+            else
+                return true
+            end
+        end
+
+        if tr.HitSky then return false end
+        if tr.Fraction >= 1 then return false end
+
+        local penMult = arccwPenetrationTable[tr.MatType] or 0.5
+
+        local dmgMult = 0.5
+        if tr.MatType == MAT_CONCRETE or tr.MatType == MAT_METAL then
+            dmgMult = 0.3
+        elseif tr.MatType == MAT_WOOD or tr.MatType == MAT_PLASTIC or tr.MatType == MAT_GLASS then
+            dmgMult = 0.8
+        elseif tr.MatType == MAT_FLESH or tr.MatType == MAT_ALIENFLESH then
+            dmgMult = 0.9
+        end
+
+        local penCost = 1 / penMult
+        local newPenLeft = penLeft - penCost
+        if newPenLeft <= 0 then return false end
+		local traceStruct = {
+            start = tr.HitPos + dir * 0.1,
+            endpos = tr.HitPos + dir * 32768,
+            mask = MASK_SHOT,
+            filter = me
+        }
+
+        local penTrace = util.TraceLine(traceStruct)
+
+        if plyTarget and penTrace.Entity == plyTarget then
+            local finalDamage = dmg * dmgMult
+            if finalDamage < 5 then return false end
+            return true
+        end
+
+        return BulletPenetrate(penTrace, newPenLeft, dmg * dmgMult, depth + 1)
+    end
+
+    local traceStruct = {
+        start = eyePos,
+        endpos = eyePos + dir * 32768,
+        mask = MASK_SHOT,
+        filter = me
+    }
+
+    local firstTrace = util.TraceLine(traceStruct)
+    return BulletPenetrate(firstTrace, penetration, damage, 0)
+end
+
+local function AutoWall(targetPos, plyTarget)
+    if not (activeWeaponClass and activeWeapon and IsValid(activeWeapon)) then return false end
+
+    local base
+    if activeWeapon.Base == "cw_base" then
+        base = "cw"
+    elseif activeWeapon.ArcCW then
+        base = "arccw"
+    else
+        base = string.Split(activeWeaponClass, "_")[1]
+    end
+    
+    local wallFunc = CustomWall[base]
+    if wallFunc then
+        local ok, result = pcall(wallFunc, targetPos, plyTarget)
+        if ok then
+            return result
+        else
+            print("[AutoWall] Error in CustomWall[" .. base .. "]: " .. tostring(result))
+            return false
+        end
+    end
+
+    local tr = util.TraceLine({
+        start  = me:EyePos(),
+        endpos = targetPos,
+        mask   = MASK_SHOT,
+        filter = me
+    })
+    return tr.Entity == plyTarget or tr.Fraction == 1
+end
+local function VisibleCheck(who, where)
+    if not IsValid(who) then return false end
+
+    local tr = util.TraceLine({
+        start  = me:EyePos(),
+        endpos = where,
+        mask   = MASK_SHOT,
+        filter = me
+    })
+
+    if tr.Entity == who or tr.Fraction == 1 then
+        return true
+    end
+
+    if vars.aim_wallz then
+        local ok, result = pcall(AutoWall, where, who)
+        if not ok then
+            print("[VisibleCheck] Erreur AutoWall :", result)
+        else
+            return result
+        end
+    end
+
+    return false
+end
+
+local function GetAngleDifference(from, to)
+    local fromF, toF = from:Forward(), to:Forward()
+    return math_deg(math_acos(toF:Dot(fromF)))
+end
+
+local function GetBestTarget()
+    local bestTarget = nil
+    local bestFov = vars.aim_fov
+	
+	
+
+    for _, ply in ip(player_GetAll()) do
+        if ply ~= me and ply:Alive() and !ply:IsDormant() then
+            local boneIndex = ply:LookupBone(vars.boneAim)
+            if boneIndex then
+                local bonePos = ply:GetBonePosition(boneIndex)
+                local steamID = ply:SteamID()
+                local god = ply:IsFlagSet(FL_GODMODE)
+                local inVeh = ply:InVehicle()
+                if bonePos and VisibleCheck(ply, bonePos) and !IsFriend(steamID) and !god and !inVeh then
+                    local targetDirection = (bonePos - me:GetShootPos()):Angle()
+                    targetDirection:Normalize()
+
+                    local angDiff = math_abs(math_NormAngle(GetAngleDifference(fa, targetDirection)))
+
+                    if angDiff < bestFov then
+                        bestFov = angDiff
+                        bestTarget = ply
+                    end
+                end
+            end
+        end
+    end
+
+    return bestTarget
+end
+
+
+
+
+local function getCenterBone(ply)
+    if not ply then return end
+    local Bone = ply:LookupBone(vars.boneAim)
+    if not Bone then return end
+    local matrix = ply:GetBoneMatrix(Bone)
+    if not matrix then return end
+    local pos, ang = matrix:GetTranslation(), matrix:GetAngles()
+    
+    local min, max = ply:GetHitBoxBounds(0, 0)
+    min:Rotate(ang)
+    max:Rotate(ang)
+    
+    pos = pos + ((min + max) * 0.5)
+    return pos
+end
+
+local function AUTOPISTOL_C( cmd )
+    if me:KeyDown( IN_ATTACK ) and me:Alive() and vars.aim_autopistol and shouldFire() then
+        cmd:RemoveKey( IN_ATTACK )
+    end
+end
+
+local function predictTarget(pos,trg)
+    if !pos or not trg then return nulVec end
+    local lvel,tvel,frm,eng = me:GetAbsVelocity(), trg:GetAbsVelocity(), realFrameTime(), eTickInter
+    if vars.predtype == 'none' then return pos end
+    if vars.predtype == 'velocity' then return pos+((lvel-tvel)*(frm/(1/eng))) end
+    if vars.predtype == 'engine'  then return tvel == nulVec and pos or pos+tvel*eng*frm-lvel*eng end
+end
+
+
+local function CrossbowPred(cmd)
+    if not vars.aim_crossbow_pred then return end
+    
+    local wep = activeWeapon
+    if not IsValid(wep) then return end
+    
+    local class = toStr(activeWeaponClass)
+    if class ~= "weapon_crossbow" and not string.find(class, "crossbow") then return end
+    
+    local target = GetBestTarget()
+    if not target then return end
+    
+    local eyePos = me:EyePos()
+    
+    local targetPos = target:GetPos()
+    local targetCenter = target:OBBCenter()
+    
+    local aimPos = targetPos + targetCenter
+    local aimAngle = (aimPos - eyePos):Angle()
+    local aimVector = aimAngle:Forward()
+    
+    local boltSpeed = vars.aim_crossbow_speed
+    local distance = eyePos:Distance(aimPos)
+    local travelTime = distance / boltSpeed
+    
+    -- Movement simulation
+    local predTime = (ded.GetLatency(0) + ded.GetLatency(1)) + travelTime
+    
+    if predTime > 1 then return end
+    
+    ded.StartSimulation(target:EntIndex())
+    
+    for i = 1, math.floor(predTime / eTickInter) do
+        ded.SimulateTick()
+    end
+    
+    local data = ded.GetSimulationData()
+    
+    aimPos = data.m_vecAbsOrigin + targetCenter
+    distance = eyePos:Distance(aimPos)
+    travelTime = distance / boltSpeed
+    
+    ded.FinishSimulation()
+    
+    -- Gravity simulation
+    local gravity = GetConVar("sv_gravity"):GetFloat() * 0.05
+    gravity = (gravity * eTickInter) * math.floor(travelTime / eTickInter)
+    
+    aimPos.z = aimPos.z + gravity
+    
+    -- Aimbot
+    local finalVec = Vector(aimPos.x, aimPos.y, aimPos.z)
+    local finalAng = (finalVec - eyePos):Angle()
+    finalAng:Normalize()
+    
+    cmd:SetViewAngles(finalAng)
+    
+    return true
+end
+
+local function _CAIM(cmd)
+
+	local wep = me:GetActiveWeapon()
+    activeWeapon = wep
+    activeWeaponClass = IsValid(wep) and wep:GetClass() or ""
+
+    if not vars.bSend then return end
+    if not me:Alive() then return end
+
+    activeWeaponClass = IsValid(me:GetActiveWeapon()) and me:GetActiveWeapon():GetClass() or ""
+    activeWeapon = me:GetActiveWeapon()
+
+    if vars.aim_autofire and cmd:KeyDown(IN_ATTACK) then
+        return
+    end
+
+    if vars.aim_autofire and vars.target and shouldFire() then
+        if string.StartWith(activeWeaponClass or "", "m9k_") then
+            cmd:RemoveKey(IN_SPEED)
+        end
+        if cmd:CommandNumber() % 2 == 0 then
+            cmd:AddKey(IN_ATTACK)
+        end
+    end
+	
+	local function ResolveTarget(ply)
+    if not IsValid(ply) or not ply:Alive() then return end
+    
+    local curYaw = ded.GetCurrentLowerBodyYaw(ply)
+    local tgtYaw = ded.GetTargetLowerBodyYaw(ply)
+    
+    if not curYaw or not tgtYaw then return end
+    
+    local delta = math.AngleDifference(curYaw, tgtYaw)
+    
+    -- Порог: если тело сильно расходится с реальным углом — резольвим
+    if math.abs(delta) > 30 then
+        -- Пересчитываем анимации под реальный (target) yaw
+        -- pitch оставляем как у цели, чтобы не ломать наклон
+        local pitch = ply:EyeAngles().p
+        ded.UpdateAnimations(ply, tgtYaw, pitch)
+        ded.InvalidateBoneCache(ply)
+    end
+end
+
+if ded and ded.GetTargetLowerBodyYaw then
+    for _, p in ipairs(player.GetAll()) do
+        if p ~= me and p:Alive() and not p:IsDormant() then
+            ResolveTarget(p)
+        end
+    end
+end
+	
+	
+	
+
+    ded.StartPrediction(cmd)
+
+        tickcount = -1;
+        vars.target = GetBestTarget()
+        local direction = cmd:GetViewAngles()
+
+        local usedCrossbow = false
+        if vars.aim_crossbow_pred and cmd:KeyDown(IN_ATTACK) then
+            usedCrossbow = CrossbowPred(cmd) or false
+        end
+
+        if not usedCrossbow and vars.aim_aimbot and shouldFire() and vars.target and cmd:KeyDown(IN_ATTACK) then
+            local class = toStr(activeWeaponClass or "")
+            if string.StartWith(class, "m9k_") then
+                cmd:RemoveKey(IN_SPEED)
+            end
+
+            local pos = getCenterBone(vars.target)
+            direction = (predictTarget(pos, vars.target) - me:GetShootPos()):Angle()
+        end
+        
+        if not usedCrossbow then
+    if vars.aim_nospread then
+        direction = NoSpread(cmd, direction)
+    end
+
+    if vars.aim_norecoil then
+        direction = NoRecoil(direction)
+    end
+
+    if string.StartWith(activeWeaponClass or "", "m9k_") then
+        local cv = GetConVar("M9KDynamicRecoil")
+        if cv and cv:GetBool() and IsValid(activeWeapon) then
+            local punch = me:GetViewPunchAngles()
+            if punch then
+                direction.p = direction.p + punch.p
+                direction.y = direction.y + punch.y
+            end
+        end
+    end
+
+    direction:Normalize()
+    cmd:SetViewAngles(direction)
+end
+
+    ded.FinishPrediction(cmd)
+end
+
+local function FAKELAG_C(cmd)
+	if(vars.fakelag and !cmd:KeyDown(IN_ATTACK)) then
+        tickcount = tickcount + 1;
+		vars.bSend = (tickcount % (vars.fakelag_factor + 1)) == 0;
+	else
+		vars.bSend = true;
+	end
+end
+
+
+
+-- === MOVEMENT STUFF === --
+
+local get_velocity_degree = function(velocity)
+    local tmp = math_deg(math_atan(30.0 / velocity))
+
+    if (tmp > 90.0) then
+        return 90.0
+    elseif (tmp < 0.0) then
+        return 0.0
+    else
+        return tmp
+    end
+end
+
+local old_yaw = 0.0
+local M_RADPI = 57.295779513082
+local side_speed = 10000
+local function Strafe(cmd)
+    local velocity = me:GetVelocity()
+    velocity.z = 0.0
+
+    local forwardmove = cmd:GetForwardMove()
+    local sidemove = cmd:GetSideMove()
+
+    if (!forwardmove || !sidemove) then
+        return
+    end
+
+    if(velocity:Length2D() <= 15.0 && !(forwardmove != 0 || sidemove != 0)) then
+        return
+    end
+
+    local flip = cmd:TickCount() % 2 == 0
+
+    local turn_direction_modifier = flip && 1.0 || -1.0
+    local viewangles = Ang(fa.x, fa.y, fa.z)
+
+    if (forwardmove || sidemove) then
+        cmd:SetForwardMove(0)
+        cmd:SetSideMove(0)
+
+        local turn_angle = math_atan2(-sidemove, forwardmove)
+        viewangles.y = viewangles.y + (turn_angle * M_RADPI)
+    elseif (forwardmove) then
+        cmd:SetForwardMove(0)
+    end
+
+    local strafe_angle = math_deg(math_atan(15 / velocity:Length2D()))
+
+    if (strafe_angle > 90) then
+        strafe_angle = 90
+    elseif (strafe_angle < 0) then
+        strafe_angle = 0
+    end
+
+    local temp = Vec(0, viewangles.y - old_yaw, 0)
+    temp.y = math_NormAngle(temp.y)
+
+    local yaw_delta = temp.y
+    old_yaw = viewangles.y
+
+    local abs_yaw_delta = math_abs(yaw_delta)
+
+    if (abs_yaw_delta <= strafe_angle || abs_yaw_delta >= 30) then
+        local velocity_angles = velocity:Angle()
+
+        temp = Vec(0, viewangles.y - velocity_angles.y, 0)
+        temp.y = math_NormAngle(temp.y)
+
+        local velocityangle_yawdelta = temp.y
+        local velocity_degree = get_velocity_degree(velocity:Length2D() * 128)
+
+        if (velocityangle_yawdelta <= velocity_degree || velocity:Length2D() <= 15) then
+            if (-velocity_degree <= velocityangle_yawdelta || velocity:Length2D() <= 15) then
+                viewangles.y = viewangles.y + (strafe_angle * turn_direction_modifier)
+                cmd:SetSideMove(side_speed * turn_direction_modifier)
+            else
+                viewangles.y = velocity_angles.y - velocity_degree
+                cmd:SetSideMove(side_speed)
+            end
+        else
+            viewangles.y = velocity_angles.y + velocity_degree
+            cmd:SetSideMove(-side_speed)
+        end
+    elseif (yaw_delta > 0) then
+        cmd:SetSideMove(-side_speed)
+    elseif (yaw_delta < 0) then
+        cmd:SetSideMove(side_speed)
+    end
+
+    local move = Vec(cmd:GetForwardMove(), cmd:GetSideMove(), 0)
+    local speed = move:Length()
+
+    local angles_move = move:Angle()
+
+    local normalized_x = math_modf(fa.x + 180, 360) - 180
+    local normalized_y = math_modf(fa.y + 180, 360) - 180
+
+    local yaw = math_rad(normalized_y - viewangles.y + angles_move.y)
+
+    if (normalized_x >= 90 || normalized_x <= -90 || fa.x >= 90 && fa.x <= 200 || fa.x <= -90 && fa.x <= 200) then
+        cmd:SetForwardMove(-math_cos(yaw) * speed)
+    else
+        cmd:SetForwardMove(math_cos(yaw) * speed)
+    end
+
+    cmd:SetSideMove(math_sin(yaw) * speed)
+end
+
+local function BHOP_C(cmd)
+    if ( cmd:KeyDown( IN_JUMP ) ) and vars.bhop then
+		if ( !me:IsFlagSet( FL_ONGROUND ) ) then
+			cmd:RemoveKey( IN_JUMP )
+            Strafe( cmd )
+		end
+	end
+end
+
+local function DESYNC_C(cmd)
+    vars.bSend = true
+    if vars.desync and !cmd:KeyDown(IN_ATTACK) then
+        local tickrate = math_floor(1 / eTickInter)
+        local seqshift =  tickrate - (tickrate / 2) + 2
+        local bRunning = true
+        if (vars.bSend) then
+            if (seqshift > 0) then
+                if (!vars.bRunning) then
+                    ded.SetOutSequenceNr(ded.GetOutSequenceNr() + seqshift)
+                    vars.bRunning = true
+                else
+                    ded.SetChokedPackets(127)
+                end
+            else
+                vars.bRunning = false
+            end
+        end
+    else
+    	vars.bRunning = false
+    end
+end
+
+-- === SPAM STUFF === --
+
+local players=FindMetaTable("Player")
+local oldcmd=players.ConCommand
+players.ConCommand=function(p,cmd,...)
+	if cmd=="jpeg"then return end
+	return oldcmd(p,cmd,...)
+end
+local function SPAM_C(cmd)
+    
+    end
+    
+    
+
+
+local tauntActive, nextAct = false, 0
+
+local function DANCE_C(cmd)
+    if tauntActive or nextAct > C() or not me:Alive() or not vars.act then return end
+    rCC("_darkrp_doanimation", "1642")
+    rCC("act", "dance")
+    tauntActive, nextAct = true, C() + 0.3
+    tSimple(7, function() tauntActive = false end)
+end
+
+-- === VIEW STUFF === --
+local togglethird = false
+
+local function THIRDPERSON_C(cmd)
+    if !vars.tps then return end
+    if kDown(KEY_V) and !togglethird then
+        vars.thirdPersonEnabled = !vars.thirdPersonEnabled
+        togglethird = true
+    elseif !kDown(KEY_V) then
+        togglethird = false
+    end
+end
+
+local function MENU_C(cmd)
+    if kDown(KEY_J) and not vars.MenuToggle then
+        vars.MenuToggle = true
+        ui()
+    elseif not kDown(KEY_J) then
+        vars.MenuToggle = false
+    end
+    
+    if _G.HideCheatVisuals then
+        if IsValid(frame) and frame:IsVisible() then
+            frame:SetVisible(false)
+            gui.EnableScreenClicker(false)
+            gui.HideGameUI()
+        end
+        vars.MenuToggle = false
+    end
+end
+
+local function UnloadHooks()
+    vars.bSend = true
+    for _, v in ip(hooks) do
+        hRemove(v.event, v.id)
+    end
+    print("Unloaded.")
+    hooks = {}
+end
+
+local function UNLOAD_C(cmd)
+    if kDown(KEY_INSERT) then
+        if frame and IsValid(frame) then
+            if frame:IsVisible() then
+                ui()
+				
+            end
+        end
+        UnloadHooks()
+        vars.unload = false
+    end
+end
+
+local function _C(cmd)
+	local wep = me:GetActiveWeapon()
+    activeWeapon = wep
+    activeWeaponClass = IsValid(wep) and wep:GetClass() or ""
+
+    if me:IsTyping() or !IsValid(me) then return end
+    Silent(cmd)
+
+    local psa = vars.aim_silent or vars.antiaim
+
+    if psa then
+        cmd:SetViewAngles(fa)
+    end
+
+    local wish_yaw = fa.y
+
+    activeWeaponClass = IsValid(me:GetActiveWeapon()) and me:GetActiveWeapon():GetClass() or ""
+    activeWeapon = me:GetActiveWeapon()
+
+    local createmove_functions = {
+    SPAM_C, FakeWalk, ANTIAIM_C, DESYNC_C,
+    BHOP_C, THIRDPERSON_C, FAKELAG_C,
+    DANCE_C, MENU_C, UNLOAD_C
+}
+
+    for _, func in ip(createmove_functions) do
+        func(cmd)
+    end
+
+    if psa then
+        MovementFix(cmd, wish_yaw)
+    else
+        fa = cmd:GetViewAngles()
+    end
+    ded.SetBSendPacket(vars.bSend)
+end
+
+local vieworigin = me:EyePos()
+local function getView(fangs, origin, angles, fov)
+    local view = {
+        origin = origin,
+        angles = fangs,
+        fov = vars.cam_fov and vars.fov or fov,
+        drawviewer = false
+    }
+
+    if vars.thirdPersonEnabled then
+        view.origin = origin - (fangs:Forward() * vars.tps_fov) + (fangs:Right() * 35)
+        view.drawviewer = true
+    end
+
+    return view
+end
+
+local function _CV(ply, origin, angles, fov, znear, zfar)
+    if _G.HideCheatVisuals then return end
+    
+    local fangs = fa or angles
+    local view = getView(fangs, origin, angles, fov)
+    vieworigin = origin
+    return view
+end
+
+local function _CVMV(wep, vm, oldPos, oldAng, pos, ang, ...)
+    if _G.HideCheatVisuals then return end
+    
+    if vars.antiaim then
+        pos = vieworigin
+        ang = fa
+        return pos, ang
+    end
+end
+local function GetEntityColor(v)
+    if v == vars.target then return colors.target end
+    return (IsValid(v) and v:IsPlayer() and IsFriend(v:SteamID())) and colors.green or colors.red
+end
+
+local IsDrawingGlow = false
+local fov = false
+
+local function _PDVM(vm)
+    if ss then return end
+	if _G.HideCheatVisuals then return end
+    if vars.w_chams then
+    rSupEngLight(true)
+
+    if IsDrawingGlow then
+        rMatOver(selfillum)
+
+        local t = RealTime() * 3
+        for i = 0, 5 do
+            local wave = 0.5 + 0.5 * math.sin(t - i * 0.8)
+            rModelLight(i, 0.3 * wave, 0.6 * wave, 1.0 * wave)
+        end
+    else
+        rColorMod(1, 1, 1)
+        rSupEngLight(false)
+        rBlend(1)
+    end
+end
+
+    if vars.w_fov then
+        if !fov then
+            Cam3Ds(nil, nil, vars.wfov)
+            rDepthRange( 0, 0 ) 
+            fov = true
+            vm:DrawModel()
+            fov = false
+            Cam3De()
+        else
+            return
+        end
+        return true
+    else
+        return false
+    end
+end
+
+local function _PODVM()
+    if ss then return end
+	if vars.w_chams then
+		rColorMod(1, 1, 1)
+		rMatOver(None)
+		rBlend(1)
+		rSupEngLight(false)
+		if IsDrawingGlow then return end
+
+		IsDrawingGlow = true
+		me:GetViewModel():DrawModel()
+		IsDrawingGlow = false
+	end
+end
+
+local function camignorez(bool)
+    rDepthRange( 0,bool and 0.8 or 1 )
+end
+
+local function chamz(v)
+    if ss then return end
+    if not IsValid(v) or v == me or not v:Alive() or v:IsDormant() or me:GetPos():Distance(v:GetPos()) > 10000 then return end
+    if not me:InVehicle() and not vars.antiaim and IsOutOfFOV(v) then return end
+
+    local teamColor = team.GetColor(v:Team())
+    local r, g, b = teamColor.r / 255, teamColor.g / 255, teamColor.b / 255
+
+    local lightColors = {
+        {r * 0.2 + 0.05, g * 0.1 + 0.05, b * 0.3 + 0.2}, -- BOX_FRONT 
+        {r * 0.4, g * 0.3 - 0.05, b * 0.2 + 0.1},       -- BOX_BACK 
+        {r * 0.7, g * 0.6 - 0.05, b * 0.2 - 0.1},      -- BOX_RIGHT
+        {r * 0.8, g * 0.5, b * 0.3 - 0.2},            -- BOX_LEFT
+        {r * 0.9, g * 0.8, b * 0.3 - 0.1},            -- BOX_TOP
+        {r * 0.4, g * 0.3, b * 0.5 + 0.2}             -- BOX_BOTTOM
+    }
+
+    local GodAndNoclip = {
+        {0.6 + 0.05, 0.6 + 0.05, 0.6 + 0.05}, -- BOX_FRONT (gris clair)
+        {0.7 + 0.1,  0.7 + 0.1,  0.7 + 0.1},  -- BOX_BACK
+        {0.8 - 0.05, 0.8 - 0.05, 0.8 - 0.05}, -- BOX_RIGHT
+        {0.9,        0.9,        0.9},        -- BOX_LEFT
+        {1.0,        1.0,        1.0},        -- BOX_TOP (le plus blanc)
+        {0.75,       0.75,       0.75}        -- BOX_BOTTOM
+    }
+
+    local isGod = v:IsFlagSet( FL_GODMODE )
+    local isNoclipped = v:GetMoveType() == MOVETYPE_NOCLIP
+    local colorTable = (isGod or isNoclipped) and GodAndNoclip or lightColors
+
+    rSupEngLight(true)
+
+    rMatOver(selfillum)
+    if IsGod and isNoclipped then
+        rBlend(0.3)
+    end
+    for i, color in ip(colorTable) do
+        rModelLight(i - 1, unpack(color))
+    end
+    v:DrawModel()
+
+    rMatOver()
+    rColorMod(1, 1, 1)
+    rSupEngLight(false)
+end
+
+local function _PDE()
+	if _G.HideCheatVisuals then return end
+    camignorez(true)
+    for k,v in ip(player_GetAll()) do
+        if (isValid(v) and v:Alive() and v ~= me) then
+            if vars.esp_chams then chamz(v) end
+        end
+    end
+    camignorez(false)
+end
+
+local tmpVec = Vec(0, 0, 0)
+
+local function drawBox(x, y, w, h, color)
+    sSetDrawColor(colors.black)
+    sDrawOutlinedRect(x - 1, y - 1, w + 2, h + 2)
+    sSetDrawColor(color)
+    sDrawOutlinedRect(x, y, w, h)
+end
+
+local function boxcorners(v)
+    if not IsValid(v) or not v:IsPlayer() then return end
+
+    local min, max = v:GetCollisionBounds()
+    local pos = v:GetPos()
+    tmpVec.x, tmpVec.y, tmpVec.z = 0, 0, max.z
+    local pos2 = pos + tmpVec
+    pos, pos2 = tScreen(pos), tScreen(pos2)
+
+    local h = pos.y - pos2.y
+    local w = h / 2
+    local x = pos.x - w / 2
+    local y = pos.y - h
+
+    drawBox(x, y, w, h, GetEntityColor(v))
+
+    -- Santé
+    local health = math_clamp(v:Health(), 0, 100)
+    local healthFrac = health * 0.01
+    local healthBarHeight = h * healthFrac
+
+    sSetDrawColor(colors.black)
+    sDrawRect(x - 6, y - 1, 4, h + 2)
+    sSetDrawColor(colors.green)
+    sDrawRect(x - 5, y + h - healthBarHeight, 2, healthBarHeight)
+
+    -- Armure
+    local armor = math_clamp(v:Armor(), 0, 100)
+    local armorFrac = armor * 0.01
+    local armorBarHeight = h * armorFrac
+
+    sSetDrawColor(colors.black)
+    sDrawRect(x + w + 2, y - 1, 4, h + 2)
+    sSetDrawColor(colors.armor)
+    sDrawRect(x + w + 3, y + h - armorBarHeight, 2, armorBarHeight)
+end
+
+
+local function txtesp(v)
+    local pos = tScreen((v:GetPos() + Vec(0, 0, 75)))
+    
+    local pName = v:Nick()
+    if v:IsAdmin() then
+        pName = pName .. " [STAFF]"
+    end
+
+    dSimpleTextOutlined(pName, vars.cmdfont, pos.x, pos.y, GetEntityColor(v), TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER, 1, colors.Background1)
+end
+
+local function xhair()
+    local X, Y = sw * 0.5, sh * 0.5
+
+    if vars.thirdPersonEnabled then
+        local trace = util.TraceLine({
+            start = me:EyePos(),
+            endpos = me:EyePos() + fa:Forward() * 10000,
+            filter = me
+        })
+
+        if trace.Hit then
+            local screenPos = tScreen(trace.HitPos)
+            X, Y = screenPos.x or X, screenPos.y or Y
+        end
+    end
+
+    local size, thickness = 3.5, 2
+    sSetDrawColor(255, 0, 0, 255)
+    sDrawRect(X - size - thickness, Y - thickness * 0.5, size, thickness)
+    sDrawRect(X + thickness, Y - thickness * 0.5, size, thickness)
+    sDrawRect(X - thickness * 0.5, Y - size - thickness, thickness, size)
+    sDrawRect(X - thickness * 0.5, Y + thickness, thickness, size)
+end
+
+local function watermark()
+    local padding = 15
+    local lineHeight = 16
+    local boxWidth = 220
+    local boxHeight = 100
+
+    sSetDrawColor(25, 25, 30, 240)
+    sDrawRect(10, 10, boxWidth, boxHeight)
+
+    sSetDrawColor(200, 50, 50, 255)
+    sDrawRect(10, 10, boxWidth, 2)
+
+    sSetDrawColor(40, 40, 45, 180)
+    sDrawRect(10, 30, boxWidth, 1)
+
+    local y = 15
+    dDrawText("CHOKCHOK", vars.cmdfont, padding, y, Color(255, 255, 255, 255))
+
+    y = y + lineHeight + 8
+    dDrawText("FPS: " .. math_round(1 / FrameTime()), vars.cmdfont, padding, y, Color(200, 200, 200, 255))
+
+    y = y + lineHeight
+    dDrawText("Tick: " .. math_round(1 / eTickInter), vars.cmdfont, padding, y, Color(200, 200, 200, 255))
+
+    y = y + lineHeight
+    local choke = string.format("%.2f", ded.GetAvgChoke(0) / 100)
+    dDrawText("Choke: " .. choke .. "s", vars.cmdfont, padding, y, Color(200, 200, 200, 255))
+
+    y = y + lineHeight
+    local ping = math_round((ded.GetLatency(0) + ded.GetLatency(1)) * 1000)
+    dDrawText("Ping: " .. ping .. "ms", vars.cmdfont, padding, y, Color(200, 200, 200, 255))
+end
+
+local function FC()
+    if not vars.aim_aimbot then return end
+    
+    local X1 = math_tan(math_rad(vars.aim_fov) / 1.25)
+    local X2 = math_tan(math_rad(me:GetFOV() / 2))
+    local r = X1 / X2
+    local radius = r * (sw / 2)
+    
+    
+    local segments = 64
+    local centerX, centerY = sw / 2, sh / 2
+    
+    sSetDrawColor(255, 0, 0, 255)
+    
+    for i = 0, segments - 1 do
+        local angle1 = (i / segments) * math_pi * 2
+        local angle2 = ((i + 1) / segments) * math_pi * 2
+        
+        local x1 = centerX + math_cos(angle1) * radius
+        local y1 = centerY + math_sin(angle1) * radius
+        local x2 = centerX + math_cos(angle2) * radius
+        local y2 = centerY + math_sin(angle2) * radius
+        
+        sDrawLine(x1, y1, x2, y2)
+    end
+end
+
+local function xhair()
+	if ss then return end
+	if _G.HideCheatVisuals then return end
+    local X, Y = sw * 0.5, sh * 0.5
+
+    if vars.thirdPersonEnabled then
+        local trace = util.TraceLine({
+            start = me:EyePos(),
+            endpos = me:EyePos() + fa:Forward() * 10000,
+            filter = me
+        })
+
+        if trace.Hit then
+            local screenPos = tScreen(trace.HitPos)
+            X, Y = screenPos.x or X, screenPos.y or Y
+        end
+    end
+
+    local rotation_angle = (CurTime() * 180) % 360
+    local scale = 10
+    local rad = math.rad
+
+    local points = {
+        scale * math.sin(rad(rotation_angle - 90)),
+        scale * math.cos(rad(rotation_angle - 90)),
+        scale * math.cos(rad(rotation_angle - 90) + 1),
+
+        scale * math.sin(rad(rotation_angle)),
+        scale * math.cos(rad(rotation_angle)),
+        scale * math.sin(rad(rotation_angle) + 1),
+
+        scale * math.sin(rad(rotation_angle + 90)),
+        scale * math.cos(rad(rotation_angle + 90)),
+        scale * math.cos(rad(rotation_angle + 90) + 1),
+
+        scale * math.sin(rad(rotation_angle + 180)),
+        scale * math.cos(rad(rotation_angle + 180)),
+        scale * math.sin(rad(rotation_angle + 180) + 1),
+    }
+
+    sSetDrawColor(0, 0, 0, 255)
+    for offset_x = -1, 1 do
+        for offset_y = -1, 1 do
+            if offset_x ~= 0 or offset_y ~= 0 then
+                local ox, oy = X + offset_x, Y + offset_y
+
+                sDrawLine(ox, oy, ox + points[1], oy - points[2])
+                sDrawLine(ox + points[1], oy - points[2], ox + points[1], oy - points[3])
+
+                sDrawLine(ox, oy, ox + points[4], oy - points[5])
+                sDrawLine(ox + points[4], oy - points[5], ox + points[6], oy - points[5])
+
+                sDrawLine(ox, oy, ox + points[7], oy - points[8])
+                sDrawLine(ox + points[7], oy - points[8], ox + points[7], oy - points[9])
+
+                sDrawLine(ox, oy, ox + points[10], oy - points[11])
+                sDrawLine(ox + points[10], oy - points[11], ox + points[12], oy - points[11])
+            end
+        end
+    end
+
+    sSetDrawColor(255, 0, 0, 255)
+
+    sDrawLine(X, Y, X + points[1], Y - points[2])
+    sDrawLine(X + points[1], Y - points[2], X + points[1], Y - points[3])
+
+    sDrawLine(X, Y, X + points[4], Y - points[5])
+    sDrawLine(X + points[4], Y - points[5], X + points[6], Y - points[5])
+
+    sDrawLine(X, Y, X + points[7], Y - points[8])
+    sDrawLine(X + points[7], Y - points[8], X + points[7], Y - points[9])
+
+    sDrawLine(X, Y, X + points[10], Y - points[11])
+    sDrawLine(X + points[10], Y - points[11], X + points[12], Y - points[11])
+end
+
+
+local function _HP()
+    if ss then return end
+	if _G.HideCheatVisuals then return end
+    if vars.unload then
+        for k,v in ip(player_GetAll()) do
+            if not IsValid(v) or v == me or not v:Alive() or v:IsDormant() then continue end
+            if me:GetPos():Distance(v:GetPos()) > 10000 then continue end
+            if not me:InVehicle() and not vars.antiaim and IsOutOfFOV(v) then continue end
+
+            if vars.esp_boxes then boxcorners(v) end
+            if vars.esp then txtesp(v) end
+        end
+        if vars.aim_aimbot and !vars.thirdPersonEnabled then
+            FC()
+            if vars.target and shouldFire() then
+                local bonePos = getCenterBone(vars.target)
+                if not bonePos then return end
+                local pos = tScreen(bonePos)
+                sSetDrawColor( colors.red )
+                sDrawLine( pos.x, pos.y, sw / 2, sh / 2 )
+            end
+        end
+        xhair()
+        watermark()
+     end
+end
+
+local function _PDOR()
+	if _G.HideCheatVisuals then return end
+    
+    if vars.aa_fake_chams and vars.antiaim then
+        DrawRealChams()
+    end
+    
+    if vars.antiaim and vars.fakelag and vars.thirdPersonEnabled then
+        local pos = me:GetPos()
+
+        camignorez(true)
+
+        cam.Start3D2D( pos, Angle(0, realAngles.y + 45, 0), 1 )
+            sSetDrawColor( colors.green )
+            sDrawLine( 0, 0, 25, 25 )
+        cam.End3D2D()
+
+        cam.Start3D2D( pos, Angle(0, fakeAngles.y + 45, 0), 1 )
+            sSetDrawColor( colors.red )
+            sDrawLine( 0, 0, 25, 25 )
+        cam.End3D2D()
+
+        camignorez( false )
+    end
+end
+
+VARhooks("CreateMove", _C)
+VARhooks("PostCreateMove", _CAIM)
+VARhooks("CalcView", _CV)
+VARhooks("CalcViewModelView", _CVMV)
+VARhooks("PreDrawViewModel", _PDVM)
+VARhooks("PostDrawViewModel", _PODVM)
+VARhooks("PostDrawOpaqueRenderables", _PDOR)
+VARhooks('PreDrawEffects', _PDE)
+VARhooks('HUDPaint', _HP)
