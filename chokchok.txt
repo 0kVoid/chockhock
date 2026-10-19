@@ -283,6 +283,9 @@ local vars = {
     thirdPersonEnabled = false,
     tps = false,
     tps_fov = 80,
+	tps_smooth = true,
+    tps_smooth_amount = 0.1,
+    tps_cam_pos = nil,
 
     cam_fov = false,
     fov = 120,
@@ -306,6 +309,7 @@ local vars = {
     aim_nospread = false,
     aim_norecoil = false,
     aim_autofire = false,
+	ignore_team = true,
 	
     predtype = 'none',
     boneAim = 'ValveBiped.Bip01_Head1',
@@ -326,10 +330,92 @@ local vars = {
 	
 	aa_sin_delta = 45,
     aa_sin_add = 0,
+	aa_tick = 0,
+    aa_side = 1,
+	resolver = false,
+    resolve_aimshots = {},
+    brute_yaw = {-90, 0, 90, 180, -180, 180, 90, 0, -90},
+	resolver_tick = 0,
+	
+	
+	rain = false,
+    rain_count = 200,   
+    rain_speed = 1500,  
+    rain_length = 20,  
+	rain_outdoor = false,
+    rain_tick = 0,
+	
+	
+	fake_duck = false,
 	
     fakelag = false,
-    fakelag_factor = 11,
+    fakelag_factor = 4,
 }
+
+local rain_drops = {}
+
+local function UpdateRain()
+    if not vars.rain then return end
+    
+    vars.rain_tick = (vars.rain_tick or 0) + 1
+    if vars.rain_tick >= 30 then
+        vars.rain_tick = 0
+        local viewEnt = me:GetViewEntity()
+        if IsValid(viewEnt) then
+            local tr = util.TraceLine({
+                filter = viewEnt,
+                start = viewEnt:GetPos(),
+                endpos = viewEnt:GetPos() + Vector(0, 0, 99999),
+                mask = MASK_SOLID + CONTENTS_MOVEABLE
+            })
+            vars.rain_outdoor = tr.HitSky
+        end
+    end
+    
+    if not vars.rain_outdoor then return end
+    
+    local plyPos = me:GetPos()
+    local vel = me:GetVelocity()
+    vel.z = 0
+    local speed = vel:Length()
+    
+    if speed > 50 then
+        plyPos = plyPos + vel:GetNormalized() * (speed * 1.5)
+    else
+        plyPos = plyPos + me:EyeAngles():Forward() * 500
+    end
+    
+    local emitter = ParticleEmitter(plyPos, false)
+    if not emitter then return end
+    
+    -- Спавним порциями: 25 капель за тик вместо всех сразу
+    local per_tick = math.max(1, math.floor(vars.rain_count / 25))
+    for i = 1, per_tick do
+        local angle = math.random() * math.pi * 2
+        local radius = math.sqrt(math.random()) * 4000
+        local pos = plyPos + Vector(
+            math.cos(angle) * radius,
+            math.sin(angle) * radius,
+            3000
+        )
+        
+        local p = emitter:Add("particle/water_drop", pos)
+        if p then
+            p:SetVelocity(Vector(0, 0, -vars.rain_speed))
+            p:SetDieTime(5)
+            p:SetStartAlpha(230)
+            p:SetStartSize(3)
+            p:SetEndSize(3)
+            p:SetColor(255, 255, 255)
+            p:SetCollide(true)
+            p:SetCollideCallback(function(part, hitPos, hitNorm)
+                part:SetDieTime(0)
+            end)
+        end
+    end
+    
+    emitter:Finish()
+end
 
 do
     local tickrate = toStr(math_round(1 / eTickInter))
@@ -860,6 +946,8 @@ local function ui()
     checkbox("AIM: AutoWall", "shoot trought the wall", "aim_wallz", 9, 46, guipanel)
     checkbox("AIM: No Spread", "reverse the spread", "aim_nospread", 9, 62, guipanel)
     checkbox("AIM: No Recoil", "reverse the recoil", "aim_norecoil", 9, 78, guipanel)
+	    checkbox("AIM: Resolver", "brute-force resolver", "resolver", 165, 46, guipanel)
+	checkbox("AIM: Ignore Team", "don't aim at teammates", "ignore_team", 165, 94, guipanel)
 
     local boneMappings = {
         head = "ValveBiped.Bip01_Head1",
@@ -900,11 +988,15 @@ local function ui()
     checkbox("MV: Bunnyhop", "toggle bunnyhop", "bhop", 165, 14, miscpanel)
     checkbox("MV: Desync", "Desync", "desync", 165, 30, miscpanel)
     checkbox("MV: FL", "toggle fakelag", "fakelag", 165, 46, miscpanel)
+	checkbox("MV: Fake Duck", "fake duck (hold LALT)", "fake_duck", 165, 62, miscpanel)
 
     -- cam stuff
     checkbox("CAM: Thirdperson", "thirdperson", "tps", 320, 14, miscpanel)
     checkbox("CAM: Fov", "fov", "cam_fov", 320, 30, miscpanel)
     checkbox("CAM: Weapon Fov", "weapon fov", "w_fov", 320, 46, miscpanel)
+	checkbox("FX: Rain", "rain effect", "rain", 320, 95, miscpanel)
+    slider("Rain Count", "rain_count", 20, 300, 320, 113, 150, 10, miscpanel)
+    slider("Rain Speed", "rain_speed", 200, 2000, 320, 131, 150, 10, miscpanel)
     slider("WFov", "wfov", 90, 150, 320, 65, 150, 10, miscpanel)
     slider("TFov", "tps_fov", 30, 150, 320, 79, 150, 10, miscpanel)
 
@@ -981,11 +1073,6 @@ end
 
 -- === AA STUFF === --
 
-
--- porno s bomjami
-local fakewalking = false
-local flicks = 0
-
 local function quick_stop(cmd)
     local velocity = me:GetVelocity()
     local speed = velocity:Length2D()
@@ -1015,49 +1102,8 @@ local function normalize_yaw(yaw)
     return yaw
 end
 
-local function FakeWalk(cmd)
-    if not vars.fakewalk then return end
-    if not vars.antiaim then return end
-    if not me:Alive() then return end
-    
-    local choked = ded.GetChokedCommands()
-    
-    local eye_yaw = fa.y
-    local real_yaw = realAngles.y
-    local fake_side = (normalize_yaw(real_yaw - eye_yaw) > 0) and -1 or 1
-    
-    local velocity = me:GetVelocity()
-    local speed = velocity:Length2D()
-    
-    local fakewalk_limit = 14
-    
-    fakewalking = true
-    
-    local stop_tick = 8
-    
-    if choked >= (fakewalk_limit - stop_tick) then
-        if cmd:GetForwardMove() ~= 0 or cmd:GetSideMove() ~= 0 then
-            quick_stop(cmd)
-        end
-    end
-    
-    if choked == (fakewalk_limit - 3) then
-        if speed <= 0 then
-            cmd:SetForwardMove(-1.01)
-        end
-        
-        flicks = flicks + 1
-        
-        if vars.fakewalk_mode == "opposite" then
-            cmd:SetViewAngles(Angle(pitch, normalize_yaw(eye_yaw + (60 * fake_side)), 0))
-        elseif vars.fakewalk_mode == "extend" then
-            cmd:SetViewAngles(Angle(pitch, normalize_yaw(eye_yaw + (90 * fake_side)), 0))
-        elseif vars.fakewalk_mode == "jitter" then
-            cmd:SetViewAngles(Angle(pitch, normalize_yaw(eye_yaw + (60 * (flicks % 2 == 0 and -1 or 1))), 0))
-        end
-    end
-end
 
+local function FakeWalk(cmd) end
 
 
 function GetBaseYaw()
@@ -1084,39 +1130,34 @@ local function CalcPitch()
 end
 
 local function CalcYaw()
-    local y = 0
-    local y2 = 0
+    local baseyaw = vars.baseyaw
     
-    
-    -- Pendulum Sway ik ultimate paste
     if vars.aa_mode_y == "pendulum" then
         local ct = CurTime()
         local delta = vars.aa_sin_delta
         local ct1 = (ct % 0.9)
         local ct2 = (ct % 2)
-        
         local x1 = ct2 * math_sin(ct1)
         local y1 = ct2 * -1 * math_cos(ct1)
-        
         local x2 = x1 + ct1 * math_sin(ct2)
         local y2 = y1 - ct1 * math_cos(ct2)
-        
-        local sin = vars.bSend and x2 * delta or y2 * delta
-        return vars.baseyaw + sin
+        local sin = vars.bSend and (x2 * delta) or (y2 * delta)
+        return baseyaw + sin
     end
     
-    y = vars.baseyaw - 180
-    
-    if vars.aa_mode_y == "side" then
-        y2 = vars.bSend and 90 or -90
-        y = vars.baseyaw - y2
+        if vars.aa_mode_y == "side" then
+        vars.aa_tick = vars.aa_tick + 1
+        if vars.aa_tick >= 4 then
+            vars.aa_tick = 0
+            vars.aa_side = -(vars.aa_side or 1)
+			end
     elseif vars.aa_mode_y == "fakeforward" then
-        y = vars.baseyaw - (vars.bSend and 90 or 180)
-    elseif vars.aa_mode_y == "none" then
-        y = vars.baseyaw
+        return baseyaw + (vars.bSend and 0 or 180)
+    elseif vars.aa_mode_y == "180fake" then
+        return baseyaw + (vars.bSend and 0 or 180)
+    else
+        return baseyaw
     end
-    
-    return y
 end
 
 
@@ -1137,25 +1178,15 @@ local function ANTIAIM_C(cmd)
     vars.baseyaw = GetBaseYaw()
     pitch = CalcPitch()
     yaw = CalcYaw()
-	vars.oldYaw = yaw
+    vars.oldYaw = yaw
     
-    if not vars.bSend then
-        fakeAngles.y = yaw
+    if vars.bSend then
+        realAngles.y = yaw
     else
-        realAngles.y = cmd:GetViewAngles().y
+        fakeAngles.y = yaw
     end
     
-    local pyAngle = Ang(pitch, yaw, 0)
-    cmd:SetViewAngles(pyAngle)
-
-    if vars.aa_mode_y == "180fake" then
-        if vars.bSend then
-            ded.SetBSendPacket(true)
-        else
-            cmd:SetViewAngles(Ang(pitch, vars.baseyaw - 180, 0))
-            ded.SetBSendPacket(false)
-        end
-    end
+    cmd:SetViewAngles(Angle(pitch, yaw, 0))
 end
 
 -- === AILMBOT STUFF === --
@@ -1866,7 +1897,8 @@ local function GetBestTarget()
 	
 
     for _, ply in ip(player_GetAll()) do
-        if ply ~= me and ply:Alive() and !ply:IsDormant() then
+                if ply ~= me and ply:Alive() and !ply:IsDormant() then
+            if vars.ignore_team and ply:Team() == me:Team() then continue end
             local boneIndex = ply:LookupBone(vars.boneAim)
             if boneIndex then
                 local bonePos = ply:GetBonePosition(boneIndex)
@@ -2010,34 +2042,72 @@ local function _CAIM(cmd)
         end
     end
 	
-	local function ResolveTarget(ply)
-    if not IsValid(ply) or not ply:Alive() then return end
-    
-    local curYaw = ded.GetCurrentLowerBodyYaw(ply)
-    local tgtYaw = ded.GetTargetLowerBodyYaw(ply)
-    
-    if not curYaw or not tgtYaw then return end
-    
-    local delta = math.AngleDifference(curYaw, tgtYaw)
-    
-    -- Порог: если тело сильно расходится с реальным углом — резольвим
-    if math.abs(delta) > 30 then
-        -- Пересчитываем анимации под реальный (target) yaw
-        -- pitch оставляем как у цели, чтобы не ломать наклон
-        local pitch = ply:EyeAngles().p
-        ded.UpdateAnimations(ply, tgtYaw, pitch)
-        ded.InvalidateBoneCache(ply)
-    end
-end
+local rain_drops = {}
+local rain_mat = Material("particle/rain_streak")
 
-if ded and ded.GetTargetLowerBodyYaw then
-    for _, p in ipairs(player.GetAll()) do
-        if p ~= me and p:Alive() and not p:IsDormant() then
-            ResolveTarget(p)
+local function UpdateRain()
+    if not vars.rain then
+        rain_drops = {}
+        return
+    end
+    
+    local plyPos = me:GetPos()
+    local ft = FrameTime()
+    local count = vars.rain_count
+    
+    -- Спавн капель, пока их меньше нужного
+    while #rain_drops < count do
+        local angle = math.random() * math.pi * 2
+        local radius = math.sqrt(math.random()) * 1000  -- равномерно по кругу
+        local x = plyPos.x + math.cos(angle) * radius
+        local y = plyPos.y + math.sin(angle) * radius
+        local z = plyPos.z + 4000  -- спавн высоко над игроком
+        
+        rain_drops[#rain_drops + 1] = {
+            pos = Vector(x, y, z),
+            speed = vars.rain_speed * (0.7 + math.random() * 0.6),
+        }
+    end
+    
+    -- Обновление позиций
+    for i = #rain_drops, 1, -1 do
+        local drop = rain_drops[i]
+        drop.pos.z = drop.pos.z - drop.speed * ft
+        
+        -- Если капля упала ниже земли (-100) или далеко от игрока — респавн
+        local dist = math.sqrt((drop.pos.x - plyPos.x)^2 + (drop.pos.y - plyPos.y)^2)
+        
+        if drop.pos.z < plyPos.z - 100 or dist > 1000 then
+            local angle = math.random() * math.pi * 2
+            local radius = math.sqrt(math.random()) * 1000
+            local x = plyPos.x + math.cos(angle) * radius
+            local y = plyPos.y + math.sin(angle) * radius
+            local z = plyPos.z + 4000
+            
+            drop.pos = Vector(x, y, z)
+            drop.speed = vars.rain_speed * (0.7 + math.random() * 0.6)
         end
     end
 end
-	
+
+local function DrawRain()
+    if not vars.rain then return end
+    if _G.HideCheatVisuals then return end
+    
+    cam.Start3D()
+        render.SetMaterial(rain_mat)
+        render.SetColorModulation(0.6, 0.7, 1)
+        
+        for i = 1, #rain_drops do
+            local drop = rain_drops[i]
+            local endPos = drop.pos - Vector(0, 0, vars.rain_length)
+            
+            render.DrawBeam(drop.pos, endPos, 1.5, 0, 1, Color(150, 180, 255, 180))
+        end
+        
+        render.SetColorModulation(1, 1, 1)
+    cam.End3D()
+end
 	
 	
 
@@ -2097,6 +2167,8 @@ local function FAKELAG_C(cmd)
 		vars.bSend = true;
 	end
 end
+
+
 
 
 
@@ -2210,7 +2282,7 @@ local function Strafe(cmd)
 end
 
 local function BHOP_C(cmd)
-    if ( cmd:KeyDown( IN_JUMP ) ) and vars.bhop then
+    if ( cmd:KeyDown( IN_JUMP ) ) and vars.bhop and not cmd:KeyDown(IN_ATTACK) then
 		if ( !me:IsFlagSet( FL_ONGROUND ) ) then
 			cmd:RemoveKey( IN_JUMP )
             Strafe( cmd )
@@ -2219,25 +2291,34 @@ local function BHOP_C(cmd)
 end
 
 local function DESYNC_C(cmd)
-    vars.bSend = true
     if vars.desync and !cmd:KeyDown(IN_ATTACK) then
         local tickrate = math_floor(1 / eTickInter)
         local seqshift =  tickrate - (tickrate / 2) + 2
-        local bRunning = true
-        if (vars.bSend) then
-            if (seqshift > 0) then
-                if (!vars.bRunning) then
-                    ded.SetOutSequenceNr(ded.GetOutSequenceNr() + seqshift)
-                    vars.bRunning = true
-                else
-                    ded.SetChokedPackets(127)
-                end
+        if (seqshift > 0) then
+            if (!vars.bRunning) then
+                ded.SetOutSequenceNr(ded.GetOutSequenceNr() + seqshift)
+                vars.bRunning = true
             else
-                vars.bRunning = false
+                ded.SetChokedPackets(vars.fakelag_factor)
             end
+        else
+            vars.bRunning = false
         end
     else
-    	vars.bRunning = false
+        vars.bRunning = false
+    end
+end
+
+local function FAKEDUCK_C(cmd)
+    if not vars.fake_duck then return end
+    if not input.IsKeyDown(KEY_LALT) then return end
+    if not me:Alive() then return end
+    if not me:IsFlagSet(FL_ONGROUND) then return end
+    
+    if vars.bSend then
+        cmd:AddKey(IN_DUCK)
+    else
+        cmd:RemoveKey(IN_DUCK)
     end
 end
 
@@ -2339,8 +2420,8 @@ local function _C(cmd)
     activeWeapon = me:GetActiveWeapon()
 
     local createmove_functions = {
-    SPAM_C, FakeWalk, ANTIAIM_C, DESYNC_C,
-    BHOP_C, THIRDPERSON_C, FAKELAG_C,
+    FAKELAG_C, FAKEDUCK_C, SPAM_C, FakeWalk, ANTIAIM_C, DESYNC_C,
+    BHOP_C, THIRDPERSON_C,
     DANCE_C, MENU_C, UNLOAD_C
 }
 
@@ -2348,7 +2429,7 @@ local function _C(cmd)
         func(cmd)
     end
 
-    if psa then
+        if psa and not cmd:KeyDown(IN_ATTACK) then
         MovementFix(cmd, wish_yaw)
     else
         fa = cmd:GetViewAngles()
@@ -2366,11 +2447,41 @@ local function getView(fangs, origin, angles, fov)
     }
 
     if vars.thirdPersonEnabled then
-        view.origin = origin - (fangs:Forward() * vars.tps_fov) + (fangs:Right() * 35)
+        local targetPos = origin - (fangs:Forward() * vars.tps_fov) + (fangs:Right() * 35)
+        if vars.tps_smooth then
+            if not vars.tps_cam_pos then
+                vars.tps_cam_pos = targetPos
+            else
+                vars.tps_cam_pos = LerpVector(vars.tps_smooth_amount, vars.tps_cam_pos, targetPos)
+            end
+            view.origin = vars.tps_cam_pos
+        else
+            view.origin = targetPos
+            vars.tps_cam_pos = targetPos
+        end
+        if vars.tps_smooth then
+            if not vars.tps_cam_ang then
+                vars.tps_cam_ang = fangs
+            else
+                vars.tps_cam_ang = LerpAngle(vars.tps_smooth_amount, vars.tps_cam_ang, fangs)
+            end
+            view.angles = vars.tps_cam_ang
+        end
         view.drawviewer = true
+    else
+        vars.tps_cam_pos = nil
+        vars.tps_cam_ang = nil
     end
 
     return view
+end
+
+if vars.fake_duck and input.IsKeyDown(KEY_LALT) then
+    if vars.bSend then
+        cmd:AddKey(IN_DUCK)
+    else
+        cmd:RemoveKey(IN_DUCK)
+    end
 end
 
 local function _CV(ply, origin, angles, fov, znear, zfar)
@@ -2380,6 +2491,20 @@ local function _CV(ply, origin, angles, fov, znear, zfar)
     local view = getView(fangs, origin, angles, fov)
     vieworigin = origin
     return view
+end
+
+
+local function FAKEDUCK_C(cmd)
+    if not vars.fake_duck then return end
+    if not input.IsKeyDown(KEY_LALT) then return end
+    if not me:Alive() then return end
+    if not me:IsFlagSet(FL_ONGROUND) then return end
+    
+    if vars.bSend then
+        cmd:AddKey(IN_DUCK)
+    else
+        cmd:RemoveKey(IN_DUCK)
+    end
 end
 
 local function _CVMV(wep, vm, oldPos, oldAng, pos, ang, ...)
@@ -2624,8 +2749,8 @@ local function watermark()
     dDrawText("Choke: " .. choke .. "s", vars.cmdfont, padding, y, Color(200, 200, 200, 255))
 
     y = y + lineHeight
-    local ping = math_round((ded.GetLatency(0) + ded.GetLatency(1)) * 1000)
-    dDrawText("Ping: " .. ping .. "ms", vars.cmdfont, padding, y, Color(200, 200, 200, 255))
+    local choke = string.format("%.2f", ded.GetAvgChoke(0))
+    dDrawText("Коч: " .. choke, vars.cmdfont, padding, y, Color(200, 200, 200, 255))
 end
 
 local function FC()
@@ -2771,12 +2896,12 @@ local function _PDOR()
 
         camignorez(true)
 
-        cam.Start3D2D( pos, Angle(0, realAngles.y + 45, 0), 1 )
+        cam.Start3D2D( pos, Angle(0, (fakeAngles.y or 0) + 45, 0), 1 )
             sSetDrawColor( colors.green )
             sDrawLine( 0, 0, 25, 25 )
         cam.End3D2D()
 
-        cam.Start3D2D( pos, Angle(0, fakeAngles.y + 45, 0), 1 )
+        cam.Start3D2D( pos, Angle(0, (realAngles.y or 0) + 45, 0), 1 )
             sSetDrawColor( colors.red )
             sDrawLine( 0, 0, 25, 25 )
         cam.End3D2D()
@@ -2794,3 +2919,22 @@ VARhooks("PostDrawViewModel", _PODVM)
 VARhooks("PostDrawOpaqueRenderables", _PDOR)
 VARhooks('PreDrawEffects', _PDE)
 VARhooks('HUDPaint', _HP)
+VARhooks("Think", UpdateRain)
+local bruteYaw = { -90, 0, 90, 180, -180, 180, 90, 0, -90 }
+
+local function RESOLVER_FSN(stage)
+    if not vars.resolver then return end
+    if stage ~= 5 then return end
+    
+    vars.resolver_tick = vars.resolver_tick + 1
+    
+    for _, v in ipairs(player.GetAll()) do
+        if v ~= me and v:Alive() and not v:IsDormant() then
+            local angs = v:EyeAngles()
+            angs.y = angs.y + bruteYaw[(vars.resolver_tick + v:EntIndex()) % #bruteYaw + 1]
+            v:SetRenderAngles(angs)
+        end
+    end
+end
+
+VARhooks("PreFrameStageNotify", RESOLVER_FSN)
